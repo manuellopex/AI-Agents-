@@ -21,15 +21,25 @@
   padding: 0;
 }
 
-html,
-body {
+html {
   height: 100%;
-  overflow: hidden;
+}
+
+body {
+  min-height: 100%;
   background-color: var(--bg-primary);
   color: white;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Lock scroll only on true desktop where the full-screen layout is active */
+@media (min-width: 1280px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
 }
 
 /* Custom scrollbar */

@@ -25,7 +25,7 @@ interface Props {
 export default function GlobalActivityFeed({ activities }: Props) {
   return (
     <div
-      className="rounded-xl flex flex-col overflow-hidden"
+      className="rounded-xl flex flex-col overflow-hidden h-64 sm:h-72 xl:h-full"
       style={{
         background: "linear-gradient(135deg, rgba(8,15,30,0.95) 0%, rgba(5,10,20,0.98) 100%)",
         border: "1px solid rgba(0,212,255,0.15)",

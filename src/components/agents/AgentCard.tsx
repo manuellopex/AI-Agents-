@@ -39,7 +39,7 @@ export default function AgentCard({ agent }: Props) {
 
   return (
     <div
-      className="relative rounded-xl overflow-hidden flex flex-col h-full group"
+      className="relative rounded-xl overflow-hidden flex flex-col h-[540px] xl:h-full group"
       style={{
         background: "linear-gradient(135deg, rgba(8,15,30,0.95) 0%, rgba(5,10,20,0.98) 100%)",
         border: `1px solid ${agent.color}25`,
