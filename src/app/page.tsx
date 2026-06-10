@@ -9,11 +9,13 @@ import SystemMetricsPanel from "@/components/panels/SystemMetrics";
 import AlertsPanel from "@/components/panels/AlertsPanel";
 import CommandConsole from "@/components/panels/CommandConsole";
 import SpaceshipView from "@/components/ship/SpaceshipView";
+import BossChat from "@/components/BossChat";
 
 type View = "dashboard" | "ship";
 
 export default function MissionControlPage() {
   const [view, setView] = useState<View>("dashboard");
+  const [showBossChat, setShowBossChat] = useState(false);
 
   const {
     agents, globalActivity, systemMetrics, alerts,
@@ -39,25 +41,42 @@ export default function MissionControlPage() {
           onEmergencyStop={emergencyStop} systemPaused={systemPaused}
         />
 
-        {/* ── View toggle ── */}
-        <div className="flex-shrink-0 flex items-center gap-1 px-4 pt-3 pb-0">
-          {(["dashboard", "ship"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className="px-3 py-1 rounded-t text-[10px] font-mono font-bold uppercase tracking-widest transition-all"
-              style={{
-                color: view === v ? "#00d4ff" : "#444",
-                background: view === v ? "rgba(0,212,255,0.08)" : "transparent",
-                borderTop: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
-                borderLeft: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
-                borderRight: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
-                borderBottom: "none",
-              }}
-            >
-              {v === "dashboard" ? "⬛ Dashboard" : "🚀 Ship View"}
-            </button>
-          ))}
+        {/* ── View toggle + Boss button ── */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 pt-3 pb-0">
+          <div className="flex items-center gap-1">
+            {(["dashboard", "ship"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className="px-3 py-1 rounded-t text-[10px] font-mono font-bold uppercase tracking-widest transition-all"
+                style={{
+                  color: view === v ? "#00d4ff" : "#444",
+                  background: view === v ? "rgba(0,212,255,0.08)" : "transparent",
+                  borderTop: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
+                  borderLeft: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
+                  borderRight: `1px solid ${view === v ? "rgba(0,212,255,0.3)" : "transparent"}`,
+                  borderBottom: "none",
+                }}
+              >
+                {v === "dashboard" ? "⬛ Dashboard" : "🚀 Ship View"}
+              </button>
+            ))}
+          </div>
+
+          {/* Talk to Boss button */}
+          <button
+            onClick={() => setShowBossChat(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
+            style={{
+              background: "linear-gradient(135deg, rgba(255,215,0,0.15) 0%, rgba(255,180,0,0.08) 100%)",
+              border: "1px solid rgba(255,215,0,0.35)",
+              color: "#ffd700",
+              boxShadow: "0 0 16px rgba(255,215,0,0.15)",
+            }}
+          >
+            <span className="animate-pulse">★</span>
+            Talk to Boss
+          </button>
         </div>
 
         {/* ── Dashboard view ── */}
@@ -109,6 +128,11 @@ export default function MissionControlPage() {
           </div>
         )}
       </div>
+
+      {/* ── Boss Chat overlay ── */}
+      {showBossChat && (
+        <BossChat agents={agents} onClose={() => setShowBossChat(false)} />
+      )}
     </div>
   );
 }

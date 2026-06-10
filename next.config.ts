@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "export",
-  // GitHub Pages serves from /AI-Agents- subdirectory
-  basePath: process.env.GITHUB_PAGES ? "/AI-Agents-" : "",
-  assetPrefix: process.env.GITHUB_PAGES ? "/AI-Agents-/" : "",
+  // Static export only for GitHub Pages; dev/production server supports API routes
+  ...(isGitHubPages ? { output: "export" } : {}),
+  basePath: isGitHubPages ? "/AI-Agents-" : "",
+  assetPrefix: isGitHubPages ? "/AI-Agents-/" : "",
   images: {
     unoptimized: true,
   },
