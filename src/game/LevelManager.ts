@@ -233,7 +233,7 @@ export class LevelManager {
     tower.position.set(0, 9.5, -26);
     tower.castShadow = true;
     this.group.add(tower);
-    this.obstacles.push({ position: new THREE.Vector3(0, 4, -26), radius: 2.7 });
+    this.obstacles.push({ position: new THREE.Vector3(0, 4, -26), radius: 2.35 });
     for (const y of [6.5, 9.5, 12.5]) {
       const stripe = new THREE.Mesh(new THREE.CylinderGeometry(2.32 - (y - 6.5) * 0.06, 2.36 - (y - 6.5) * 0.06, 0.7, 12),
         new THREE.MeshStandardMaterial({ color: 0x2aa6a0 }));

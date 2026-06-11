@@ -125,7 +125,7 @@ export class EnemyController {
       const horizontalSq = dx * dx + dz * dz;
 
       // Salto sobre el enemigo: si Mael cae encima, lo aplasta y rebota
-      if (playerVelocityY < -3 && dy > 0.4 && dy < 1.6 && horizontalSq < 1.0) {
+      if (playerVelocityY < -2 && dy > 0.3 && dy < 1.8 && horizontalSq < 1.4) {
         enemy.kill();
         this.effects.burst(enemy.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xb25bd6, 12, 4);
         this.onEnemyDefeated?.(enemy.position.clone());

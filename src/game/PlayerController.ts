@@ -24,7 +24,7 @@ export class PlayerController {
   grounded = false;
 
   /** Radio del ataque de giro. */
-  readonly attackRadius = 2.2;
+  readonly attackRadius = 2.4;
   /** true durante la ventana activa del ataque. */
   attacking = false;
 
@@ -102,6 +102,27 @@ export class PlayerController {
   /** Ángulo hacia el que mira Mael (lo usa Oryn para colocarse en su hombro). */
   get facingY(): number {
     return this.bodyGroup.rotation.y;
+  }
+
+  /** Tipo del ataque en curso (válido mientras attacking === true). */
+  get activeAttackKind(): AttackKind {
+    return this.currentAttack;
+  }
+
+  /**
+   * Hitboxes del ataque en curso (siguen al jugador cada frame).
+   * El golpe hacia adelante incluye además una burbuja alrededor del
+   * cuerpo: los enemigos que entren de lado también reciben el golpe.
+   */
+  getAttackHitboxes(): { center: THREE.Vector3; radius: number }[] {
+    if (this.currentAttack === 'punch') {
+      const dir = new THREE.Vector3(Math.sin(this.bodyGroup.rotation.y), 0, Math.cos(this.bodyGroup.rotation.y));
+      return [
+        { center: this.group.position.clone().addScaledVector(dir, 1.2), radius: 1.6 },
+        { center: this.group.position.clone(), radius: 1.7 },
+      ];
+    }
+    return [{ center: this.group.position.clone(), radius: this.attackRadius }];
   }
 
   /** Inicia el daño visual + retroceso. Lo invoca el GameManager. */
@@ -205,12 +226,20 @@ export class PlayerController {
     this.raycaster.far = 30;
     const hits = this.raycaster.intersectObjects(this.groundMeshes, false);
 
+    const wasGrounded = this.grounded;
     this.grounded = false;
     if (hits.length > 0) {
       const groundY = hits[0].point.y;
       const feet = this.group.position.y;
-      if (this.velocity.y <= 0 && feet <= groundY + 0.05 && prevY >= groundY - this.maxStepHeight) {
-        // Aterrizaje / caminando sobre el suelo
+      // Aterrizaje robusto (sin tunneling a baja tasa de frames):
+      //  - crossedPlane: los pies estaban por encima del suelo el frame
+      //    anterior y ahora por debajo → aterriza aunque la caída haya
+      //    avanzado más de un escalón en un solo frame (ground pound, lag)
+      //  - stick: ya estaba en el suelo → sigue pegado en pendientes y
+      //    escalones de hasta maxStepHeight
+      const crossedPlane = prevY >= groundY - 0.001 && feet <= groundY + 0.05;
+      const stick = wasGrounded && Math.abs(groundY - feet) <= this.maxStepHeight;
+      if (this.velocity.y <= 0 && (crossedPlane || stick)) {
         this.group.position.y = groundY;
         this.velocity.y = 0;
         this.grounded = true;
@@ -232,7 +261,7 @@ export class PlayerController {
             break;
           }
         }
-      } else if (this.grounded === false && feet < groundY - this.maxStepHeight && this.velocity.y <= 0 && prevY < groundY) {
+      } else if (wasGrounded && feet < groundY - this.maxStepHeight && this.velocity.y <= 0 && prevY < groundY) {
         // Estamos contra la pared lateral de una plataforma más alta:
         // deshacer movimiento horizontal para no atravesarla.
         this.group.position.x -= this.velocity.x * dt;
@@ -261,21 +290,23 @@ export class PlayerController {
 
   private updateAttack(dt: number): void {
     this.attackCooldown = Math.max(this.attackCooldown - dt, 0);
-    if (this.input.consumeAttack() && this.attackCooldown <= 0 && !this.attacking) {
+    // Orden importante: el botón solo se consume cuando el ataque puede
+    // dispararse → pulsar durante el cooldown queda en buffer y sale solo
+    if (this.attackCooldown <= 0 && !this.attacking && this.input.consumeAttack()) {
       // Ground pound: ataque en el aire = caída en picado con golpe de área
       if (!this.grounded && !this.pounding) {
         this.pounding = true;
         this.velocity.set(this.velocity.x * 0.2, -26, this.velocity.z * 0.2);
-        this.attackCooldown = 0.6;
+        this.attackCooldown = 0.5;
         return;
       }
       const speed = Math.hypot(this.velocity.x, this.velocity.z);
       this.attacking = true;
-      this.attackCooldown = 1.0; // cooldown breve
+      this.attackCooldown = 0.55; // cooldown corto: combate ágil
       if (speed > 4) {
         // Golpe hacia adelante: embestida corta en la dirección de la carrera
         this.currentAttack = 'punch';
-        this.attackTimer = 0.25;
+        this.attackTimer = 0.32;
         const dir = new THREE.Vector3(Math.sin(this.bodyGroup.rotation.y), 0, Math.cos(this.bodyGroup.rotation.y));
         this.velocity.x = dir.x * 12;
         this.velocity.z = dir.z * 12;

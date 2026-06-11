@@ -259,24 +259,7 @@ export class GameManager {
         else this.effects.burst(center.clone().add(new THREE.Vector3(0, 1, 0)), 0xffd34d, 6, 3);
       }
 
-      this.enemies.attackAt(center, radius);
-
-      // Provocar al Caracoral: atacar cerca de él lo hace embestir hacia ti
-      if (this.brute.position.distanceTo(center) < radius + 2.5) {
-        this.brute.provoke(this.player.position.clone());
-      }
-
-      // Excavar la reliquia que encontró Oryn
-      if (!this.level.moundDug && center.distanceTo(this.level.moundPos) < radius + 1.2) {
-        this.digRelic();
-      }
-
-      for (const cratePos of this.level.breakCratesNear(center, radius)) {
-        this.audio.playBreak();
-        this.effects.burst(cratePos, 0xc98f4e, 12, 4);
-        this.collectibles.spawnCrystal(cratePos.clone().add(new THREE.Vector3(0.4, 0.6, 0)));
-        this.collectibles.spawnCrystal(cratePos.clone().add(new THREE.Vector3(-0.4, 0.6, 0)));
-      }
+      this.applyAttackHit(center, radius);
     };
 
     this.player.onFellOffMap = () => {
@@ -362,6 +345,33 @@ export class GameManager {
       this.input.setVisible(false);
       this.ui.showDefeatScreen();
     };
+  }
+
+  /**
+   * Aplica el daño del ataque al mundo (enemigos, Caracoral, reliquia,
+   * cajas). Se llama al iniciar el ataque Y cada frame mientras dura la
+   * animación, para que conecte aunque el enemigo entre en rango durante
+   * el giro o la embestida.
+   */
+  private applyAttackHit(center: THREE.Vector3, radius: number): void {
+    this.enemies.attackAt(center, radius);
+
+    // Provocar al Caracoral: atacar cerca de él lo hace embestir hacia ti
+    if (this.brute.position.distanceTo(center) < radius + 2.5) {
+      this.brute.provoke(this.player.position.clone());
+    }
+
+    // Excavar la reliquia que encontró Oryn
+    if (!this.level.moundDug && center.distanceTo(this.level.moundPos) < radius + 1.2) {
+      this.digRelic();
+    }
+
+    for (const cratePos of this.level.breakCratesNear(center, radius)) {
+      this.audio.playBreak();
+      this.effects.burst(cratePos, 0xc98f4e, 12, 4);
+      this.collectibles.spawnCrystal(cratePos.clone().add(new THREE.Vector3(0.4, 0.6, 0)));
+      this.collectibles.spawnCrystal(cratePos.clone().add(new THREE.Vector3(-0.4, 0.6, 0)));
+    }
   }
 
   private hurtPlayer(from: THREE.Vector3, orynLine: string): void {
@@ -514,6 +524,12 @@ export class GameManager {
     if (this.state === 'playing') {
       this.player.cameraYaw = this.cameraCtrl.yaw;
       this.player.update(dt);
+      // Hitbox activo durante TODA la ventana del ataque (no solo el 1er frame)
+      if (this.player.attacking) {
+        for (const { center, radius } of this.player.getAttackHitboxes()) {
+          this.applyAttackHit(center, radius);
+        }
+      }
       this.health.update(dt);
       this.enemies.update(dt, this.player.position, this.player.velocity.y);
       this.brute.update(dt, this.player.position);
