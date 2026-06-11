@@ -133,6 +133,8 @@ export class LevelManager {
 
   constructor(scene: THREE.Scene) {
     this.buildTerrain();
+    this.buildCliffRocks();
+    this.buildFloatingIsles();
     this.buildWater();
     this.buildVista();
     this.buildHubArea();
@@ -218,6 +220,80 @@ export class LevelManager {
     this.addIsland(0, -22, 34, 26, 4.5, 0x4ca65e, 5.3);         // meseta central
     this.addIsland(0, -40, 23, 17, 8, 0x58b368, 9.7);           // tierras altas del norte
     this.addIsland(-36, 4, 13, 11, 1.15, 0xeed3a0, 7.7);        // arenal del Coral Dormido
+  }
+
+  /**
+   * Riscos instanciados bordeando las terrazas: los bordes de las mesetas
+   * ganan volumen 3D real en lugar de una pendiente lisa (1 draw call).
+   */
+  private buildCliffRocks(): void {
+    const rings: [number, number, number, number, number, number, number][] = [
+      // cx, cz, rx, rz, yTop, cantidad, escala
+      [0, -22, 34, 26, 4.4, 34, 1.5],   // borde de la meseta central
+      [0, -40, 23, 17, 7.9, 26, 1.3],   // borde de las tierras altas
+      [0, -8, 52, 44, 0.9, 30, 1.8],    // costa de la isla base
+    ];
+    const total = rings.reduce((sum, r) => sum + r[5], 0);
+    const geo = new THREE.DodecahedronGeometry(1, 0);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb9b09b, roughness: 0.95 });
+    const rocks = new THREE.InstancedMesh(geo, mat, total);
+    rocks.frustumCulled = false;
+    const dummy = new THREE.Object3D();
+    let i = 0;
+    for (const [cx, cz, rx, rz, yTop, count, scale] of rings) {
+      for (let k = 0; k < count; k++) {
+        const a = (k / count) * Math.PI * 2 + Math.sin(k * 7.3) * 0.15;
+        // Sobre la pendiente, justo bajo el borde de la meseta (e ≈ 0.83)
+        const e = 0.83 + Math.random() * 0.06;
+        dummy.position.set(cx + Math.cos(a) * rx * e, yTop - 0.7 - Math.random() * 0.6, cz + Math.sin(a) * rz * e);
+        dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * 0.5);
+        dummy.scale.set(
+          scale * (0.7 + Math.random() * 0.8),
+          scale * (0.5 + Math.random() * 0.5),
+          scale * (0.7 + Math.random() * 0.6),
+        );
+        dummy.updateMatrix();
+        rocks.setMatrixAt(i++, dummy.matrix);
+      }
+    }
+    this.group.add(rocks);
+  }
+
+  /**
+   * Islas flotantes sobre las bahías: verticalidad explorable con Lumas
+   * en anillo y lianas colgando. Se puede aterrizar en ellas.
+   */
+  private buildFloatingIsles(): void {
+    const isles: [number, number, number, number][] = [
+      // x, y, z, radio
+      [-26, 7, 16, 3.2], [40, 8.5, 8, 2.6], [-12, 11, -58, 3],
+    ];
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0xa89a82, roughness: 0.95 });
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x58b368, roughness: 0.9 });
+    const vineMat = new THREE.MeshStandardMaterial({ color: 0x3f7d4a, roughness: 0.9 });
+    for (const [x, y, z, r] of isles) {
+      // Base rocosa en punta invertida + tapa de césped pisable
+      const base = new THREE.Mesh(new THREE.ConeGeometry(r, r * 1.6, 9), rockMat);
+      base.rotation.x = Math.PI;
+      base.position.set(x, y - r * 0.8, z);
+      base.castShadow = true;
+      this.group.add(base);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.04, 0.5, 12), grassMat);
+      top.position.set(x, y + 0.25, z);
+      top.receiveShadow = true;
+      this.group.add(top);
+      this.groundMeshes.push(top);
+      // Lianas colgando (profundidad vertical)
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * Math.PI * 2 + 0.5;
+        const vine = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, 1.6 + Math.random(), 5), vineMat);
+        vine.position.set(x + Math.cos(a) * r * 0.8, y - 0.9, z + Math.sin(a) * r * 0.8);
+        vine.rotation.z = (Math.random() - 0.5) * 0.2;
+        this.group.add(vine);
+      }
+      // Recompensa: anillo de Lumas sobre la isla
+      this.lumaRing(x, y + 1.6, z, r * 0.6, 5);
+    }
   }
 
   private buildWater(): void {

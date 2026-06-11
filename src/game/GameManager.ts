@@ -4,6 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { Atmosphere } from './Atmosphere';
 import { AudioManager } from './AudioManager';
 import { CameraController } from './CameraController';
 import { CaracoralBrute } from './CaracoralBrute';
@@ -21,6 +22,7 @@ import { MobileInputController } from './MobileInputController';
 import { PlayerController } from './PlayerController';
 import { SkyDome } from './SkyDome';
 import { UIManager } from './UIManager';
+import { Vegetation } from './Vegetation';
 import { VoiceSystem } from './VoiceSystem';
 
 type GameState = 'ready' | 'playing' | 'paused' | 'cutscene' | 'faro' | 'defeat';
@@ -64,6 +66,8 @@ export class GameManager {
   private health = new HealthSystem();
   private cutscene!: CutsceneSystem;
   private elaria!: ElariaApparition;
+  private vegetation!: Vegetation;
+  private atmosphere!: Atmosphere;
   /** Estado al que volver cuando termina la cutscene. */
   private postCutsceneState: GameState = 'playing';
 
@@ -275,6 +279,14 @@ export class GameManager {
     this.cameraCtrl.snapTo(this.player.position);
     this.cutscene = new CutsceneSystem(this.cameraCtrl.camera, (sp, tx, dur) => this.ui.say(sp, tx, dur));
     this.elaria = new ElariaApparition(this.scene);
+    // Capas de profundidad: hierba con viento, nubes y aves en órbita
+    this.vegetation = new Vegetation(this.scene, this.level.groundMeshes, [
+      { cx: 0, cz: 8, rx: 34, rz: 22, count: 130 },     // playa sur / hub
+      { cx: 0, cz: -22, rx: 25, rz: 18, count: 90 },    // meseta central
+      { cx: 0, cz: -40, rx: 17, rz: 12, count: 60 },    // tierras altas
+      { cx: -36, cz: 4, rx: 9, rz: 8, count: 30 },      // arenal del coral
+    ]);
+    this.atmosphere = new Atmosphere(this.scene);
 
     // Post-procesado: render + bloom (la magia brilla de verdad) + salida
     this.composer = new EffectComposer(this.renderer);
@@ -802,6 +814,8 @@ export class GameManager {
     }
     this.level.update(dt);
     this.effects.update(dt);
+    this.vegetation.update(dt);
+    this.atmosphere.update(dt);
 
     this.updateAdaptiveQuality(dt);
     this.composer.render();
