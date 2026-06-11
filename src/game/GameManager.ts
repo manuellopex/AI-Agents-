@@ -153,6 +153,15 @@ export class GameManager {
     };
     this.ui.setVoiceMuted(this.voice.muted);
     this.ui.onContinue = () => this.startPlaying();
+    // Muerte sin castigo de progreso: corazones llenos + último checkpoint.
+    // Destellos, Lumas, notas y misiones se conservan tal cual.
+    this.ui.onRespawn = () => {
+      this.health.reset();
+      this.ui.setHealth(this.health.health);
+      this.player.respawn();
+      this.cameraCtrl.snapTo(this.player.position);
+      this.startPlaying();
+    };
     this.ui.onRestart = () => {
       this.clearIntro();
       this.buildWorld();

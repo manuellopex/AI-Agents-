@@ -79,6 +79,8 @@ export class UIManager {
   onSkipCutscene: (() => void) | null = null;
   onResume: (() => void) | null = null;
   onRestart: (() => void) | null = null;
+  /** Despertar en el último checkpoint conservando el progreso. */
+  onRespawn: (() => void) | null = null;
   onStart: (() => void) | null = null;
   onContinue: (() => void) | null = null;
 
@@ -436,8 +438,12 @@ export class UIManager {
   showDefeatScreen(): void {
     this.showOverlay(
       `<h1 style="font-size:32px;color:${COLOR.coral};">¡Ay no!</h1>
-       <p style="font-size:14px;color:#d8eef5;">Oryn: «Eso tuvo que doler. ¡Otra vez, con más estilo!»</p>`,
-      [{ label: 'Reintentar', action: () => this.onRestart?.() }],
+       <p style="font-size:14px;color:#d8eef5;">Oryn: «Eso tuvo que doler… Tranquilo, tu progreso está a salvo.»</p>
+       <p style="font-size:12px;color:#9fd8e8;">Despertarás en el último checkpoint con tus Destellos, Lumas y misiones intactos.</p>`,
+      [
+        { label: 'Despertar en el checkpoint', action: () => this.onRespawn?.() },
+        { label: 'Reiniciar la isla', action: () => this.onRestart?.(), secondary: true },
+      ],
     );
   }
 
