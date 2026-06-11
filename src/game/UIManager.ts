@@ -321,10 +321,10 @@ export class UIManager {
 
   /** Mini-mapa de Costa Brillante con marcadores de Destellos y jugador. */
   private buildMap(rows: DestelloRow[], playerX: number, playerZ: number): string {
-    // Mundo: x ∈ [-38, 38], z ∈ [-34, 16] → mapa 190×150
+    // Mundo: x ∈ [-55, 55], z ∈ [-58, 30] → mapa 190×150
     const W = 190; const H = 150;
-    const mx = (x: number) => ((x + 38) / 76) * W;
-    const mz = (z: number) => ((z + 34) / 50) * H;
+    const mx = (x: number) => ((x + 55) / 110) * W;
+    const mz = (z: number) => ((z + 58) / 88) * H;
     const dots = rows.map((r) => {
       const color = r.estado === 'completado' ? COLOR.gold : r.estado === 'pendiente' ? COLOR.auralis : '#5a6a78';
       return `<div style="position:absolute;left:${mx(r.x) - 5}px;top:${mz(r.z) - 5}px;width:10px;height:10px;` +
@@ -336,7 +336,7 @@ export class UIManager {
     return `<div style="${GLASS}border-radius:14px;padding:10px;">
       <div style="font-size:12px;letter-spacing:2px;color:#9fd8e8;margin-bottom:6px;">MAPA</div>
       <div style="position:relative;width:${W}px;height:${H}px;background:rgba(30,203,205,.08);border-radius:10px;">
-        <div style="position:absolute;left:${mx(0) - 14}px;top:${mz(-24) - 8}px;font-size:10px;color:#9fd8e8;">FARO</div>
+        <div style="position:absolute;left:${mx(0) - 14}px;top:${mz(-44) - 10}px;font-size:10px;color:#9fd8e8;">FARO</div>
         ${dots}${player}
       </div>
       <div style="font-size:10px;color:#7a98a8;margin-top:5px;">⭐ logrado · ◉ activo · gris bloqueado · ● tú</div>

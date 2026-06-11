@@ -162,7 +162,7 @@ export class GameManager {
 
   private buildWorld(): void {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x9fd6e8, 60, 170);
+    this.scene.fog = new THREE.Fog(0x9fd6e8, 80, 230);
 
     // Iluminación ambiental basada en imagen: reflejos y profundidad reales
     if (!this.envTexture) {
@@ -184,11 +184,11 @@ export class GameManager {
     sun.position.set(18, 35, -10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -38;
-    sun.shadow.camera.right = 38;
-    sun.shadow.camera.top = 42;
-    sun.shadow.camera.bottom = -42;
-    sun.shadow.camera.far = 110;
+    sun.shadow.camera.left = -58;
+    sun.shadow.camera.right = 58;
+    sun.shadow.camera.top = 62;
+    sun.shadow.camera.bottom = -62;
+    sun.shadow.camera.far = 140;
     sun.target.position.set(0, 0, -10);
     this.scene.add(sun, sun.target);
 
@@ -524,8 +524,8 @@ export class GameManager {
   /** Filas de Destellos para pausa/mapa/pantalla final. */
   private destelloRows() {
     const mapPos: Record<string, [number, number]> = {
-      faro: [0, -26], coral: [-26, -4], oryn: [30, -10],
-      quiries: [11.5, 4], cueva: [10.5, -22], desafio: [-11, 6],
+      faro: [0, -44], coral: [-36, 4], oryn: [38, -6],
+      quiries: [16, 8], cueva: [-28, -14], desafio: [20, -34],
     };
     return this.destellos.defs.map((d) => ({
       nombre: d.nombre,
@@ -718,7 +718,7 @@ export class GameManager {
   /** Reacciones contextuales al explorar. */
   private storyMoments(): void {
     const p = this.player.position;
-    if (!this.storyFlags.bruteSeen && p.x < -16) {
+    if (!this.storyFlags.bruteSeen && p.x < -26) {
       this.storyFlags.bruteSeen = true;
       this.ui.say('Oryn', 'Ese caracol gigante embiste si te acercas… ¡úsalo contra las rocas moradas!', 4500);
     }
