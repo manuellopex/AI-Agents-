@@ -1,0 +1,98 @@
+/**
+ * AudioManager
+ * -------------
+ * Genera todos los sonidos del juego con WebAudio (sintetizados, sin assets).
+ * Son placeholders fáciles de reemplazar por archivos reales más adelante:
+ * basta con sustituir el cuerpo de cada método play* por la reproducción
+ * de un AudioBuffer.
+ */
+export class AudioManager {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private musicTimer: ReturnType<typeof setInterval> | null = null;
+  private musicStep = 0;
+  private muted = false;
+
+  /** Debe llamarse tras un gesto del usuario (requisito de los navegadores). */
+  init(): void {
+    if (this.ctx) return;
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    this.ctx = new Ctx();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = 0.5;
+    this.masterGain.connect(this.ctx.destination);
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0.16;
+    this.musicGain.connect(this.masterGain);
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.5;
+  }
+
+  /** Tono simple con envolvente. Base de todos los efectos. */
+  private tone(freq: number, duration: number, type: OscillatorType, volume = 0.3, slideTo?: number): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (slideTo !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(slideTo, 1), t + duration);
+    gain.gain.setValueAtTime(volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain).connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + duration + 0.05);
+  }
+
+  playJump(): void { this.tone(320, 0.18, 'square', 0.15, 640); }
+  playDoubleJump(): void { this.tone(420, 0.2, 'square', 0.15, 880); }
+  playPickup(): void { this.tone(880, 0.12, 'sine', 0.25, 1760); this.tone(1320, 0.18, 'sine', 0.12); }
+  playHurt(): void { this.tone(220, 0.3, 'sawtooth', 0.25, 80); }
+  playAttack(): void { this.tone(180, 0.22, 'sawtooth', 0.18, 420); }
+  playBreak(): void { this.tone(140, 0.25, 'square', 0.2, 60); }
+  playEnemyDown(): void { this.tone(500, 0.25, 'triangle', 0.2, 120); }
+  playVictory(): void { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, 0.35, 'triangle', 0.25), i * 140)); }
+  /** Canto breve de un Quirí: dos notas dulces y agudas, ambiente isleño. */
+  playQuiri(): void { this.tone(1680, 0.14, 'sine', 0.07, 2050); setTimeout(() => this.tone(2050, 0.18, 'sine', 0.06, 1680), 160); }
+  playDefeat(): void { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => this.tone(f, 0.4, 'triangle', 0.22), i * 180)); }
+
+  /** Música de fondo placeholder: arpegio pentatónico relajado, vibra tropical. */
+  startMusic(): void {
+    if (!this.ctx || this.musicTimer) return;
+    // Escala pentatónica mayor de Do — alegre y "de aventura".
+    const scale = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3];
+    const pattern = [0, 2, 4, 5, 4, 2, 3, 1];
+    this.musicTimer = setInterval(() => {
+      if (!this.ctx || !this.musicGain || this.muted) return;
+      const t = this.ctx.currentTime;
+      const note = scale[pattern[this.musicStep % pattern.length]] * (this.musicStep % 16 < 8 ? 1 : 0.5);
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = note;
+      gain.gain.setValueAtTime(0.5, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      osc.connect(gain).connect(this.musicGain);
+      osc.start(t);
+      osc.stop(t + 0.6);
+      this.musicStep++;
+    }, 300);
+  }
+
+  stopMusic(): void {
+    if (this.musicTimer) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+  }
+
+  dispose(): void {
+    this.stopMusic();
+    this.ctx?.close();
+    this.ctx = null;
+  }
+}
