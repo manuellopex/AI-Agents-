@@ -14,10 +14,12 @@ import * as THREE from 'three';
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
 
-  /** Offset de la cámara respecto al jugador (cercana y algo elevada). */
-  private readonly offset = new THREE.Vector3(0, 4.6, 6.0);
-  /** El lookAt apunta lejos por delante: llena la pantalla de horizonte. */
-  private readonly lookAhead = new THREE.Vector3(0, 2.0, -9.0);
+  /** Offset de la cámara respecto al jugador (elevada y con distancia
+   *  suficiente para leer mapa, enemigos y saltos). */
+  private readonly offset = new THREE.Vector3(0, 7.2, 9.2);
+  /** El lookAt apunta por delante: el personaje queda en el tercio
+   *  inferior y se ve mucho terreno de juego. */
+  private readonly lookAhead = new THREE.Vector3(0, 1.4, -7.5);
   private readonly followLerp = 4.5;  // suavizado de posición
   private readonly lookLerp = 5.5;    // suavizado del punto de mira
   /** Cuánto se adelanta la mirada hacia el movimiento lateral. */
