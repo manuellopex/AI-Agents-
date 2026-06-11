@@ -64,6 +64,9 @@ export class GameManager {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tone mapping cinematográfico: colores cálidos y saturados sin quemar
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.domElement.style.cssText = 'position:absolute;inset:0;display:block;';
     container.appendChild(this.renderer.domElement);
 
@@ -131,12 +134,13 @@ export class GameManager {
   private buildWorld(): void {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7fd4e8); // cielo caribeño
-    this.scene.fog = new THREE.Fog(0x7fd4e8, 35, 90);
+    // Niebla lejana: deja ver la ciudad-acantilado pero da profundidad aérea
+    this.scene.fog = new THREE.Fog(0x9fdcec, 42, 130);
 
     // Iluminación: sol dorado de isla + luz ambiente cálida del cielo
-    const hemi = new THREE.HemisphereLight(0xd8f0ff, 0x7aae6e, 0.95);
+    const hemi = new THREE.HemisphereLight(0xd8f0ff, 0x8fb573, 1.0);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffe2a8, 1.5);
+    const sun = new THREE.DirectionalLight(0xffdf9e, 1.7);
     sun.position.set(12, 30, -20);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -267,7 +271,7 @@ export class GameManager {
       this.oryn.update(dt, this.player.position, this.player.facingY);
       // Liora brilla según la fracción de Lumas recuperados
       this.liora.update(dt, this.player.position, this.collectibles.collected / Math.max(this.collectibles.total, 1));
-      this.cameraCtrl.update(dt, this.player.position);
+      this.cameraCtrl.update(dt, this.player.position, this.player.velocity);
       this.storyMoments();
       // Ambiente sonoro: un Quirí canta de vez en cuando
       this.quiriTimer -= dt;

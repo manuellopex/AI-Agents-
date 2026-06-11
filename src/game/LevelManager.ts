@@ -68,9 +68,13 @@ export class LevelManager {
   constructor(scene: THREE.Scene) {
     this.buildIslands();
     this.buildWater();
+    this.buildVista();
     this.buildDecorations();
     this.buildVillage();
     this.buildRoads();
+    this.buildBanners();
+    this.buildCrystalClusters();
+    this.buildFlowers();
     this.buildRuins();
     this.buildCrates();
     this.buildQuiries();
@@ -139,6 +143,170 @@ export class LevelManager {
     this.water.rotation.x = -Math.PI / 2;
     this.water.position.y = 0.1;
     this.group.add(this.water);
+
+    // Bandas de agua poco profunda (turquesa claro) alrededor de cada isla
+    const shallowMat = new THREE.MeshBasicMaterial({
+      color: 0x7fe8dc, transparent: true, opacity: 0.45,
+    });
+    const islands: [number, number, number][] = [
+      [0, 0, 11], [0, -18, 9], [0, -44, 11], [0, -62, 9.5],
+    ];
+    for (const [x, z, r] of islands) {
+      const shallow = new THREE.Mesh(new THREE.CircleGeometry(r, 22), shallowMat);
+      shallow.rotation.x = -Math.PI / 2;
+      shallow.position.set(x, 0.19, z);
+      this.group.add(shallow);
+    }
+  }
+
+  /**
+   * Vista de fondo: la gran ciudad-acantilado de Isla Auria al este del
+   * camino (riscos crema con cascada y torres de terracota) y mar abierto
+   * con farallones y veleros al oeste. Solo decorado: fuera del área jugable.
+   */
+  private buildVista(): void {
+    const cliffMat = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, flatShading: true });
+    const cliffTopMat = new THREE.MeshStandardMaterial({ color: 0x58b368, flatShading: true });
+
+    // Muralla de riscos al este (lado derecho del recorrido)
+    const cliffs: [number, number, number, number][] = [
+      // x, z, altura, ancho
+      [17, 2, 9, 7], [18.5, -8, 13, 8], [16.5, -18, 10, 6], [19, -28, 16, 9],
+      [17, -38, 12, 7], [18.5, -48, 17, 9], [16.5, -58, 13, 7], [18, -68, 18, 10],
+    ];
+    for (const [x, z, h, w] of cliffs) {
+      const cliff = new THREE.Mesh(new THREE.BoxGeometry(w, h, 9), cliffMat);
+      cliff.position.set(x, h / 2 - 1, z);
+      cliff.rotation.y = (Math.random() - 0.5) * 0.25;
+      this.group.add(cliff);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(w * 0.95, 0.7, 8.5), cliffTopMat);
+      top.position.set(x, h - 0.65, z);
+      top.rotation.y = cliff.rotation.y;
+      this.group.add(top);
+    }
+
+    // Torres de la ciudad antigua sobre los riscos (crema + techos terracota)
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xc96f4a, flatShading: true });
+    const towers: [number, number, number, number][] = [
+      [18, -28, 16, 1.1], [16.8, -30.5, 16, 0.8], [18.6, -48, 17, 1.2],
+      [16.9, -50.5, 17, 0.9], [17.8, -68, 18, 1.3], [16.2, -66, 18, 0.9],
+    ];
+    for (const [x, z, baseY, r] of towers) {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.85, r, 3.2, 7), this.matStone);
+      tower.position.set(x, baseY + 1.3, z);
+      this.group.add(tower);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(r * 1.15, 1.6, 7), roofMat);
+      roof.position.set(x, baseY + 3.7, z);
+      this.group.add(roof);
+    }
+    // Cúpula dorada: el corazón de la ciudad, visible desde lejos
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1.6, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffd34d, emissive: 0xa87208, emissiveIntensity: 0.35, flatShading: true }),
+    );
+    dome.position.set(18, 19.6, -68);
+    this.group.add(dome);
+
+    // Cascada que baja del risco hasta el mar
+    const fallMat = new THREE.MeshBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.75 });
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 14), fallMat);
+    fall.position.set(14.4, 7.5, -28);
+    fall.rotation.y = -Math.PI / 2;
+    this.group.add(fall);
+    const foam = new THREE.Mesh(
+      new THREE.CircleGeometry(2.2, 14),
+      new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 0.6 }),
+    );
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(14.2, 0.21, -28);
+    this.group.add(foam);
+
+    // Farallones y veleros en el mar abierto (oeste)
+    for (const [x, z, h] of [[-15, -6, 5], [-17, -26, 7], [-14.5, -50, 4.5], [-18, -64, 8]] as [number, number, number][]) {
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.6, h, 6), cliffMat);
+      stack.position.set(x, h / 2 - 0.8, z);
+      this.group.add(stack);
+    }
+    const sailMat = new THREE.MeshStandardMaterial({ color: 0xfdf6e0, flatShading: true, side: THREE.DoubleSide });
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
+    for (const [x, z, rot] of [[-11, -14, 0.6], [-12.5, -38, -0.8]] as [number, number, number][]) {
+      const boat = new THREE.Group();
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 0.6), hullMat);
+      hull.position.y = 0.15;
+      boat.add(hull);
+      const sail = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.5, 4), sailMat);
+      sail.scale.z = 0.08;
+      sail.position.y = 1.1;
+      boat.add(sail);
+      boat.position.set(x, 0.12, z);
+      boat.rotation.y = rot;
+      this.group.add(boat);
+    }
+  }
+
+  /** Estandartes teal y dorado que enmarcan el camino (energía de festival). */
+  private buildBanners(): void {
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
+    const flagMats = [
+      new THREE.MeshStandardMaterial({ color: 0x2ec4b6, flatShading: true, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xffd34d, flatShading: true, side: THREE.DoubleSide }),
+    ];
+    const spots: [number, number, number][] = [
+      [-1.8, 1, -5.8], [1.8, 1, -5.8],     // salida de la aldea
+      [-1.8, 1, -14.2], [1.8, 1, -14.2],   // entrada a la segunda isla
+      [-1.8, 2, -38.4], [1.8, 2, -38.4],   // entrada a la isla central
+      [-1.8, 1.5, -57.2], [1.8, 1.5, -57.2], // antesala de la meta
+    ];
+    spots.forEach(([x, y, z], i) => {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 5), poleMat);
+      pole.position.set(x, y + 1.2, z);
+      this.group.add(pole);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.4), flagMats[i % 2]);
+      flag.position.set(x + (x > 0 ? -0.36 : 0.36), y + 2.15, z);
+      this.group.add(flag);
+    });
+  }
+
+  /** Cristales gigantes decorativos de Auralis (azul profundo, no se recogen). */
+  private buildCrystalClusters(): void {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x4f9cff, emissive: 0x1f5fd0, emissiveIntensity: 0.8, flatShading: true,
+      transparent: true, opacity: 0.92,
+    });
+    const spots: [number, number, number, number][] = [
+      [-6, 1, -2.5, 0.7], [6.2, 1, -4.5, 0.5], [4.2, 1, -20.5, 0.6],
+      [-4.5, 2, -47.8, 0.8], [5.6, 2, -43, 0.55], [-5.2, 1.5, -62.5, 0.6],
+      [3.4, 1.5, -65.8, 0.75], [-5, 6.3, -40, 0.45],
+    ];
+    for (const [x, y, z, s] of spots) {
+      for (let i = 0; i < 3; i++) {
+        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(s * (1 - i * 0.3)), mat);
+        crystal.position.set(x + (i - 1) * s * 0.8, y + s * (1 - i * 0.25), z + (i % 2) * s * 0.5);
+        crystal.rotation.set((Math.random() - 0.5) * 0.6, Math.random() * Math.PI, (Math.random() - 0.5) * 0.6);
+        this.group.add(crystal);
+      }
+    }
+  }
+
+  /** Flores coral y doradas salpicadas por el césped. */
+  private buildFlowers(): void {
+    const mats = [
+      new THREE.MeshStandardMaterial({ color: 0xf2917e, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0xffd34d, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0xe85a8a, flatShading: true }),
+    ];
+    const geo = new THREE.IcosahedronGeometry(0.09, 0);
+    const spots: [number, number, number][] = [
+      [-3.2, 1, 2.2], [3.8, 1, -2.6], [-5.8, 1, -1.8], [2.6, 1, 2.8], [-1.8, 1, -4.6],
+      [2.2, 1, -16.2], [-2.8, 1, -19.4], [4.1, 1, -17.8],
+      [3.2, 2, -41.2], [-3.6, 2, -43.8], [1.8, 2, -47.2], [-2.2, 2, -40.6], [5.4, 2, -46.2],
+      [2.8, 1.5, -59.2], [-3.4, 1.5, -63.6], [4.6, 1.5, -61.8],
+    ];
+    spots.forEach(([x, y, z], i) => {
+      const flower = new THREE.Mesh(geo, mats[i % mats.length]);
+      flower.position.set(x, y + 0.08, z);
+      this.group.add(flower);
+    });
   }
 
   /** Árbol estilizado: tronco + copa de esferas low-poly. */

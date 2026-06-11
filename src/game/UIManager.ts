@@ -52,27 +52,39 @@ export class UIManager {
     }
     this.root.appendChild(heartsBox);
 
-    // Contador de Lumas
+    // Contador de Lumas: píldora bajo los corazones (como en la maqueta)
     this.lumaCounter = document.createElement('div');
     this.lumaCounter.style.cssText =
-      'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:#fff;font-weight:800;font-size:20px;' +
-      'background:rgba(10,40,60,.55);padding:6px 16px;border-radius:20px;border:1px solid rgba(120,230,255,.5);';
+      'position:absolute;top:52px;left:14px;color:#fff;font-weight:800;font-size:17px;' +
+      'background:rgba(10,40,60,.5);padding:5px 14px;border-radius:18px;border:1px solid rgba(120,230,255,.55);' +
+      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
     this.lumaCounter.textContent = '🔹 0 / 0';
     this.root.appendChild(this.lumaCounter);
 
-    // Botón de pausa
+    // Tarjeta de misión (arriba-derecha, bajo la pausa)
+    const quest = document.createElement('div');
+    quest.style.cssText =
+      'position:absolute;top:64px;right:14px;max-width:46%;color:#ffe9b8;font-size:12px;line-height:1.45;' +
+      'background:rgba(10,40,60,.5);padding:8px 12px;border-radius:12px;border:1px solid rgba(255,211,77,.45);' +
+      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);text-align:left;';
+    quest.innerHTML =
+      '<b style="color:#ffd34d;">✦ Costa Brillante</b><br>Encuentra el primer destello<br><span style="color:#9fe8ff;">Sigue la luz de Liora</span>';
+    this.root.appendChild(quest);
+
+    // Botón de pausa (cristal redondeado)
     const pauseBtn = document.createElement('div');
     pauseBtn.textContent = '⏸';
     pauseBtn.style.cssText =
-      'position:absolute;top:12px;right:14px;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;' +
-      'justify-content:center;font-size:22px;color:#fff;background:rgba(10,40,60,.55);border:1px solid rgba(255,255,255,.35);pointer-events:auto;';
+      'position:absolute;top:12px;right:14px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;' +
+      'justify-content:center;font-size:20px;color:#fff;background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.45);' +
+      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:auto;';
     pauseBtn.addEventListener('pointerdown', () => this.onPause?.());
     this.root.appendChild(pauseBtn);
 
     // Burbuja de diálogo compartida (Oryn, Mael, Elaria)
     this.mikoBubble = document.createElement('div');
     this.mikoBubble.style.cssText =
-      'position:absolute;top:72px;left:50%;transform:translateX(-50%);max-width:78%;color:#1b3a44;background:#fdf6e0;' +
+      'position:absolute;top:158px;left:50%;transform:translateX(-50%);max-width:78%;color:#1b3a44;background:#fdf6e0;' +
       'padding:10px 16px;border-radius:16px;border:2px solid #7de8c3;font-size:14px;font-weight:600;text-align:center;' +
       'opacity:0;transition:opacity .3s;box-shadow:0 4px 12px rgba(0,0,0,.25);';
     this.root.appendChild(this.mikoBubble);

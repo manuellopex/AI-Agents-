@@ -43,7 +43,8 @@ export class MobileInputController {
     this.stickBase = document.createElement('div');
     this.stickBase.style.cssText =
       'position:absolute;left:24px;bottom:36px;width:130px;height:130px;border-radius:50%;' +
-      'background:rgba(255,255,255,.10);border:2px solid rgba(255,255,255,.25);pointer-events:auto;';
+      'background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);' +
+      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,20,40,.25);pointer-events:auto;';
     this.stickKnob = document.createElement('div');
     this.stickKnob.style.cssText =
       'position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;' +
@@ -51,11 +52,11 @@ export class MobileInputController {
     this.stickBase.appendChild(this.stickKnob);
     this.root.appendChild(this.stickBase);
 
-    // --- Botones de acción ---
-    const jumpBtn = this.makeButton('SALTO', 'right:24px;bottom:48px;width:84px;height:84px;background:rgba(80,200,120,.55);');
-    const attackBtn = this.makeButton('GIRO', 'right:118px;bottom:120px;width:68px;height:68px;background:rgba(240,110,90,.55);');
-    jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.jumpQueued = true; });
-    attackBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.attackQueued = true; });
+    // --- Botones de acción: cristal translúcido con icono (estilo maqueta) ---
+    const jumpBtn = this.makeButton('⬆', 'right:22px;bottom:120px;width:80px;height:80px;font-size:34px;');
+    const attackBtn = this.makeButton('🗡', 'right:34px;bottom:36px;width:64px;height:64px;font-size:26px;');
+    jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.jumpQueued = true; this.pressFx(jumpBtn); });
+    attackBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.attackQueued = true; this.pressFx(attackBtn); });
     this.root.appendChild(jumpBtn);
     this.root.appendChild(attackBtn);
 
@@ -73,14 +74,22 @@ export class MobileInputController {
     container.appendChild(this.root);
   }
 
-  private makeButton(label: string, extraCss: string): HTMLDivElement {
+  private makeButton(icon: string, extraCss: string): HTMLDivElement {
     const btn = document.createElement('div');
-    btn.textContent = label;
+    btn.textContent = icon;
     btn.style.cssText =
       'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
-      'color:#fff;font:700 13px system-ui;letter-spacing:1px;border:2px solid rgba(255,255,255,.4);' +
+      'color:#fff;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.16);' +
+      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,20,40,.25);' +
+      'text-shadow:0 2px 4px rgba(0,0,0,.35);transition:transform .08s;' +
       'pointer-events:auto;touch-action:none;' + extraCss;
     return btn;
+  }
+
+  /** Pequeño feedback de pulsación en los botones. */
+  private pressFx(btn: HTMLDivElement): void {
+    btn.style.transform = 'scale(0.88)';
+    setTimeout(() => { btn.style.transform = 'scale(1)'; }, 90);
   }
 
   // --- Manejo del joystick táctil ---
