@@ -21,6 +21,7 @@ import { MobileInputController } from './MobileInputController';
 import { PlayerController } from './PlayerController';
 import { SkyDome } from './SkyDome';
 import { UIManager } from './UIManager';
+import { VoiceSystem } from './VoiceSystem';
 
 type GameState = 'ready' | 'playing' | 'paused' | 'cutscene' | 'faro' | 'defeat';
 
@@ -46,6 +47,7 @@ export class GameManager {
   private input: MobileInputController;
   private ui: UIManager;
   private audio = new AudioManager();
+  private voice = new VoiceSystem();
 
   // Mundo (se reconstruye al reiniciar)
   private scene!: THREE.Scene;
@@ -125,11 +127,18 @@ export class GameManager {
       if (this.state !== 'playing') return;
       this.state = 'paused';
       this.audio.stopMusic();
+      this.voice.stop();
       this.ui.showPauseScreen(this.destelloRows(), this.collectibles.balance,
         this.player.position.x, this.player.position.z);
     };
     this.ui.onResume = () => this.startPlaying();
-    this.ui.onSkipCutscene = () => this.cutscene?.skip();
+    this.ui.onSkipCutscene = () => { this.voice.stop(); this.cutscene?.skip(); };
+    this.ui.onSay = (speaker, text) => this.voice.speak(speaker, text);
+    this.ui.onToggleVoice = () => {
+      this.voice.setMuted(!this.voice.muted);
+      return this.voice.muted;
+    };
+    this.ui.setVoiceMuted(this.voice.muted);
     this.ui.onContinue = () => this.startPlaying();
     this.ui.onRestart = () => {
       this.clearIntro();
@@ -410,6 +419,7 @@ export class GameManager {
     this.health.onDeath = () => {
       this.state = 'defeat';
       this.audio.stopMusic();
+      this.voice.stop();
       this.audio.playDefeat();
       this.input.setVisible(false);
       this.ui.showDefeatScreen();
@@ -830,6 +840,7 @@ export class GameManager {
 
   dispose(): void {
     cancelAnimationFrame(this.rafId);
+    this.voice.dispose();
     this.clearIntro();
     window.removeEventListener('resize', this.handleResize);
     this.audio.dispose();

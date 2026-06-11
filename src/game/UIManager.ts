@@ -71,6 +71,10 @@ export class UIManager {
   private overlay: HTMLDivElement | null = null;
 
   onPause: (() => void) | null = null;
+  /** Se dispara con cada línea de diálogo (lo usa la narración por voz). */
+  onSay: ((speaker: Speaker, text: string) => void) | null = null;
+  /** Alternar narración por voz. Devuelve el nuevo estado de silencio. */
+  onToggleVoice: (() => boolean) | null = null;
   /** Saltar la cutscene en curso. */
   onSkipCutscene: (() => void) | null = null;
   onResume: (() => void) | null = null;
@@ -164,6 +168,22 @@ export class UIManager {
     this.root.appendChild(pauseBtn);
     this.hudGroup.push(pauseBtn);
 
+    // Narración por voz: alternar con un toque
+    const voiceBtn = document.createElement('div');
+    voiceBtn.textContent = '🔊';
+    voiceBtn.id = 'mo-voice-btn';
+    voiceBtn.style.cssText =
+      `position:absolute;top:64px;right:14px;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;` +
+      `justify-content:center;font-size:16px;color:${COLOR.cream};${GLASS}pointer-events:auto;`;
+    voiceBtn.addEventListener('pointerdown', () => {
+      const muted = this.onToggleVoice?.();
+      voiceBtn.textContent = muted ? '🔇' : '🔊';
+    });
+    this.root.appendChild(voiceBtn);
+    this.hudGroup.push(voiceBtn);
+    // La tarjeta de objetivo baja un poco para dejar sitio al botón
+    this.questCard.style.top = '110px';
+
     // Caja de diálogo: panel crema/pergamino (cálido, narrativo)
     this.dialogue = document.createElement('div');
     this.dialogue.style.cssText =
@@ -237,6 +257,12 @@ export class UIManager {
       `<b style="color:${COLOR.gold};">✦ Costa Brillante</b><br>${html}`;
   }
 
+  /** Refleja el estado inicial de la narración (preferencia guardada). */
+  setVoiceMuted(muted: boolean): void {
+    const btn = this.root.querySelector('#mo-voice-btn');
+    if (btn) btn.textContent = muted ? '🔇' : '🔊';
+  }
+
   /** Modo cinemático: barras de cine, HUD oculto y botón Saltar. */
   setCinematic(active: boolean): void {
     this.barTop.style.height = active ? '9%' : '0';
@@ -279,6 +305,7 @@ export class UIManager {
 
   /** Diálogo corto con nombre del personaje (panel crema narrativo). */
   say(speaker: Speaker, text: string, duration = 3500): void {
+    this.onSay?.(speaker, text);
     this.dialogue.textContent = `${speaker}: «${text}»`;
     this.dialogue.style.borderColor = SPEAKER_COLORS[speaker];
     this.dialogue.style.opacity = '1';
