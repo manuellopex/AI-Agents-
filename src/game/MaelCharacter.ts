@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 /** Estado de gameplay que el personaje traduce a poses. */
 export interface MaelPose {
-  /** Velocidad horizontal actual. */
   speed: number;
   grounded: boolean;
   velocityY: number;
@@ -12,43 +11,52 @@ export interface MaelPose {
 }
 
 /**
- * MaelCharacter
- * --------------
- * Modelo procedural de Mael Veyra fiel a su hoja de personaje:
- * pelo castaño oscuro despeinado en puntas, ojos grandes expresivos,
- * túnica crema con ribetes teal y capucha, faja teal, cinturón de cuero
- * con el artefacto circular de Auralis (espiral dorada brillante),
- * pantalones bombachos, brazaletes y sandalias.
+ * MaelCharacter — modelo fiel a la hoja de personaje (turnaround oficial)
+ * ------------------------------------------------------------------------
+ * Proporciones del concepto (~5,5 cabezas, no chibi), construido por
+ * piezas articuladas:
+ *  - Pelo castaño chocolate voluminoso en puntas, flequillo y patillas
+ *  - Ojos grandes marrones con cejas gruesas y sonrisa
+ *  - Túnica crema sin mangas con cuello en V teal y camiseta interior
+ *  - Capucha-capa triangular teal con ribete dorado colgando en la espalda
+ *  - Faja teal con panel lateral (triángulos dorados) + cinturón de cuero
+ *  - Artefacto circular de Auralis (aro dorado, espiral teal emisiva) en
+ *    la cadera izquierda delantera
+ *  - Colgante teal, brazaletes con borde dorado, bandas en los bíceps
+ *  - Bombachos crema recogidos bajo la rodilla, espinillas vendadas y
+ *    sandalias de tiras
  *
- * Está construido con pivotes por extremidad (caderas/hombros/cabeza)
- * para animarlo por código: ciclo de carrera, respiración en idle y
- * poses de salto, caída, giro, golpe y ground pound.
+ * Articulación real: caderas + rodillas y hombros + codos, animados por
+ * estado de juego (carrera con flexión de rodilla, salto, giro, golpe,
+ * ground pound, idle con respiración).
  */
 export class MaelCharacter {
-  /** Raíz del personaje (el PlayerController la rota para mirar/girar). */
   readonly root = new THREE.Group();
 
-  private legL!: THREE.Group;
-  private legR!: THREE.Group;
-  private armL!: THREE.Group;
-  private armR!: THREE.Group;
+  // Pivotes articulados
+  private thighL!: THREE.Group; private kneeL!: THREE.Group;
+  private thighR!: THREE.Group; private kneeR!: THREE.Group;
+  private shoulderL!: THREE.Group; private elbowL!: THREE.Group;
+  private shoulderR!: THREE.Group; private elbowR!: THREE.Group;
   private head!: THREE.Group;
   private torso!: THREE.Group;
-  private cape!: THREE.Mesh;
+  private hood!: THREE.Group;
 
   private runPhase = 0;
   private time = 0;
 
-  // Paleta tomada de los swatches de la hoja de personaje
-  private skin = new THREE.MeshStandardMaterial({ color: 0xe8a56c, roughness: 0.75 });
-  private hair = new THREE.MeshStandardMaterial({ color: 0x2e1f14, roughness: 0.9 });
-  private cream = new THREE.MeshStandardMaterial({ color: 0xf2e3c2, roughness: 0.85 });
-  private teal = new THREE.MeshStandardMaterial({ color: 0x1f9e96, roughness: 0.7 });
-  private tealDark = new THREE.MeshStandardMaterial({ color: 0x14706b, roughness: 0.7 });
-  private gold = new THREE.MeshStandardMaterial({ color: 0xd9a23b, roughness: 0.4, metalness: 0.5 });
-  private leather = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.85 });
+  // Paleta exacta de los swatches de la hoja
+  private skin = new THREE.MeshStandardMaterial({ color: 0xdf9c63, roughness: 0.7 });
+  private hair = new THREE.MeshStandardMaterial({ color: 0x271811, roughness: 0.85 });
+  private cream = new THREE.MeshStandardMaterial({ color: 0xf0e2c4, roughness: 0.8 });
+  private creamLight = new THREE.MeshStandardMaterial({ color: 0xfaf2dd, roughness: 0.85 });
+  private teal = new THREE.MeshStandardMaterial({ color: 0x1d9b94, roughness: 0.65 });
+  private tealDark = new THREE.MeshStandardMaterial({ color: 0x126b66, roughness: 0.7 });
+  private gold = new THREE.MeshStandardMaterial({ color: 0xc89638, roughness: 0.35, metalness: 0.6 });
+  private leather = new THREE.MeshStandardMaterial({ color: 0x5f4128, roughness: 0.85 });
+  private leatherLight = new THREE.MeshStandardMaterial({ color: 0x8a6238, roughness: 0.8 });
   private auralis = new THREE.MeshStandardMaterial({
-    color: 0x7fe8dc, emissive: 0x1ecbcd, emissiveIntensity: 1.5, roughness: 0.3,
+    color: 0x8df0e4, emissive: 0x1ecbcd, emissiveIntensity: 1.6, roughness: 0.3,
   });
 
   constructor() {
@@ -61,10 +69,6 @@ export class MaelCharacter {
     });
   }
 
-  // ------------------------------------------------------------------
-  // Construcción
-  // ------------------------------------------------------------------
-
   private mesh(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D,
     x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0): THREE.Mesh {
     const m = new THREE.Mesh(geo, mat);
@@ -74,216 +78,295 @@ export class MaelCharacter {
     return m;
   }
 
-  /** Piernas con pivote en la cadera: pantalón bombacho + sandalia. */
+  // ------------------------------------------------------------------
+  // Piernas: cadera → bombacho → rodilla → espinilla vendada → sandalia
+  // ------------------------------------------------------------------
   private buildLegs(): void {
     for (const side of [-1, 1]) {
-      const leg = new THREE.Group();
-      leg.position.set(0.12 * side, 0.62, 0); // cadera
-      // Bombacho crema (ancho arriba, recogido al tobillo)
-      this.mesh(new THREE.CapsuleGeometry(0.115, 0.26, 6, 14), this.cream, leg, 0, -0.18, 0);
-      this.mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.1, 12), this.teal, leg, 0, -0.4, 0);
-      // Tobillo y sandalia con tiras
-      this.mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.1, 10), this.skin, leg, 0, -0.49, 0);
-      this.mesh(new THREE.BoxGeometry(0.15, 0.05, 0.27), this.leather, leg, 0, -0.585, 0.05);
-      this.mesh(new THREE.BoxGeometry(0.13, 0.035, 0.05), this.leather, leg, 0, -0.55, 0.12, 0.5);
-      if (side < 0) this.legL = leg; else this.legR = leg;
-      this.root.add(leg);
+      const thigh = new THREE.Group();
+      thigh.position.set(0.085 * side, 0.84, 0);
+      // Bombacho crema (volumen del muslo, recogido hacia la rodilla)
+      const baggy = this.mesh(new THREE.CapsuleGeometry(0.095, 0.22, 6, 14), this.cream, thigh, 0, -0.16, 0);
+      baggy.scale.set(1.12, 1, 1.05);
+      // Puño del bombacho bajo la rodilla
+      this.mesh(new THREE.CylinderGeometry(0.068, 0.075, 0.07, 12), this.cream, thigh, 0, -0.34, 0);
+
+      const knee = new THREE.Group();
+      knee.position.set(0, -0.38, 0);
+      thigh.add(knee);
+      // Espinilla con venda clara (la hoja muestra el tobillo envuelto)
+      this.mesh(new THREE.CapsuleGeometry(0.048, 0.2, 6, 12), this.skin, knee, 0, -0.13, 0);
+      this.mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.12, 10), this.creamLight, knee, 0, -0.26, 0);
+      // Sandalia: suela + tiras de cuero cruzadas
+      this.mesh(new THREE.BoxGeometry(0.115, 0.04, 0.24), this.leather, knee, 0, -0.435, 0.045);
+      this.mesh(new THREE.BoxGeometry(0.1, 0.028, 0.04), this.leatherLight, knee, 0, -0.4, 0.1, 0.55);
+      this.mesh(new THREE.BoxGeometry(0.1, 0.028, 0.035), this.leatherLight, knee, 0, -0.385, 0.02, -0.4);
+      // Dedos (punta de piel asomando)
+      this.mesh(new THREE.SphereGeometry(0.045, 8, 6), this.skin, knee, 0, -0.43, 0.15);
+
+      if (side < 0) { this.thighL = thigh; this.kneeL = knee; }
+      else { this.thighR = thigh; this.kneeR = knee; }
+      this.root.add(thigh);
     }
   }
 
-  /** Túnica crema con ribete teal, faja, cinturón y el artefacto de Auralis. */
+  // ------------------------------------------------------------------
+  // Torso: túnica, faja, cinturón, artefacto, capucha-capa y colgante
+  // ------------------------------------------------------------------
   private buildTorso(): void {
     this.torso = new THREE.Group();
-    this.torso.position.y = 0.62;
+    this.torso.position.y = 0.84;
     this.root.add(this.torso);
 
-    // Túnica (algo acampanada hacia la cadera)
-    this.mesh(new THREE.CapsuleGeometry(0.235, 0.34, 8, 18), this.cream, this.torso, 0, 0.28, 0);
-    this.mesh(new THREE.CylinderGeometry(0.27, 0.305, 0.18, 18), this.cream, this.torso, 0, 0.06, 0);
-    // Cuello en V teal (dos tiras cruzadas)
-    this.mesh(new THREE.BoxGeometry(0.05, 0.2, 0.02), this.teal, this.torso, -0.075, 0.5, 0.225, 0.12, 0, 0.5);
-    this.mesh(new THREE.BoxGeometry(0.05, 0.2, 0.02), this.teal, this.torso, 0.075, 0.5, 0.225, 0.12, 0, -0.5);
+    // Túnica crema: pecho + falda corta acampanada sobre la cadera
+    const chest = this.mesh(new THREE.CapsuleGeometry(0.155, 0.26, 8, 18), this.cream, this.torso, 0, 0.3, 0);
+    chest.scale.set(1.15, 1, 0.92);
+    this.mesh(new THREE.CylinderGeometry(0.175, 0.205, 0.16, 18), this.cream, this.torso, 0, 0.1, 0);
+    // Camiseta interior clara asomando en el pecho
+    this.mesh(new THREE.SphereGeometry(0.09, 12, 10), this.creamLight, this.torso, 0, 0.4, 0.1);
 
-    // Faja teal con caída lateral + cinturón de cuero
-    this.mesh(new THREE.CylinderGeometry(0.285, 0.295, 0.085, 18), this.teal, this.torso, 0, 0.1, 0);
-    this.mesh(new THREE.BoxGeometry(0.16, 0.3, 0.02), this.teal, this.torso, -0.2, -0.08, 0.12, 0.1, 0.5, 0.12);
-    this.mesh(new THREE.BoxGeometry(0.02, 0.3, 0.16), this.tealDark, this.torso, -0.24, -0.1, 0.04, 0.08, 0, 0.18);
-    const belt = this.mesh(new THREE.TorusGeometry(0.275, 0.035, 8, 22), this.leather, this.torso, 0, 0.17, 0);
+    // Cuello en V con ribete teal
+    this.mesh(new THREE.BoxGeometry(0.035, 0.17, 0.015), this.teal, this.torso, -0.055, 0.44, 0.145, 0.18, 0, 0.45);
+    this.mesh(new THREE.BoxGeometry(0.035, 0.17, 0.015), this.teal, this.torso, 0.055, 0.44, 0.145, 0.18, 0, -0.45);
+    // Colgante: cordón + gema teal
+    this.mesh(new THREE.SphereGeometry(0.02, 8, 8), this.auralis, this.torso, 0, 0.36, 0.15);
+
+    // Faja teal ancha + cinturón de cuero por encima
+    this.mesh(new THREE.CylinderGeometry(0.185, 0.2, 0.11, 18), this.teal, this.torso, 0, 0.04, 0);
+    const belt = this.mesh(new THREE.TorusGeometry(0.185, 0.026, 8, 22), this.leather, this.torso, 0, 0.09, 0);
     belt.rotation.x = Math.PI / 2;
+    this.mesh(new THREE.BoxGeometry(0.05, 0.045, 0.02), this.gold, this.torso, -0.04, 0.09, 0.185);
 
-    // Artefacto circular de Auralis (la pieza icónica del cinturón)
+    // Panel lateral de la faja (cae sobre la pierna izquierda, con
+    // ribete y triángulos dorados como en la hoja)
+    const panel = new THREE.Group();
+    panel.position.set(-0.12, -0.02, 0.1);
+    panel.rotation.set(0.12, 0.45, 0.1);
+    this.mesh(new THREE.BoxGeometry(0.15, 0.32, 0.018), this.teal, panel);
+    this.mesh(new THREE.BoxGeometry(0.15, 0.035, 0.02), this.gold, panel, 0, -0.15, 0.001);
+    for (const px of [-0.04, 0.03]) {
+      this.mesh(new THREE.ConeGeometry(0.022, 0.04, 3), this.gold, panel, px, -0.085, 0.012, 0, 0, Math.PI);
+    }
+    this.torso.add(panel);
+    // Segunda caída de tela más oscura detrás
+    this.mesh(new THREE.BoxGeometry(0.1, 0.26, 0.015), this.tealDark, this.torso, -0.19, -0.06, -0.02, 0.05, 0.7, 0.15);
+
+    // ARTEFACTO DE AURALIS: cadera delantera izquierda (como el detalle
+    // ampliado de la hoja): aro dorado grueso, tachuelas, núcleo en
+    // espiral teal brillante y colgantito inferior
     const artifact = new THREE.Group();
-    artifact.position.set(0.1, 0.16, 0.27);
-    artifact.rotation.x = 0.15;
-    const ring = this.mesh(new THREE.TorusGeometry(0.085, 0.028, 10, 22), this.gold, artifact);
-    ring.rotation.x = 0; // de frente
-    this.mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.025, 18), this.auralis, artifact, 0, 0, 0, Math.PI / 2);
-    // Espiral sugerida: tres cuentas doradas sobre el núcleo
-    for (let i = 0; i < 3; i++) {
-      const a = i * 2.1;
-      this.mesh(new THREE.SphereGeometry(0.014, 8, 8), this.gold, artifact,
-        Math.cos(a) * 0.032, Math.sin(a) * 0.032, 0.018);
-    }
-    // Tachuelas del aro
+    artifact.position.set(-0.115, 0.07, 0.155);
+    artifact.rotation.set(0.1, -0.35, 0);
+    this.mesh(new THREE.TorusGeometry(0.072, 0.026, 10, 24), this.gold, artifact);
+    this.mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.022, 18), this.auralis, artifact, 0, 0, 0, Math.PI / 2);
+    // Espiral: cuentas que giran hacia el centro
     for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + 0.4;
-      this.mesh(new THREE.SphereGeometry(0.016, 8, 8), this.gold, artifact,
-        Math.cos(a) * 0.085, Math.sin(a) * 0.085, 0.012);
+      const a = i * 1.7;
+      const r = 0.034 - i * 0.007;
+      this.mesh(new THREE.SphereGeometry(0.011 - i * 0.0015, 8, 8), this.gold, artifact,
+        Math.cos(a) * r, Math.sin(a) * r, 0.014);
     }
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      this.mesh(new THREE.SphereGeometry(0.013, 8, 8), this.gold, artifact,
+        Math.cos(a) * 0.072, Math.sin(a) * 0.072, 0.01);
+    }
+    // Colgante que cuelga del artefacto
+    this.mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6), this.gold, artifact, 0, -0.095, 0);
+    this.mesh(new THREE.ConeGeometry(0.014, 0.035, 6), this.gold, artifact, 0, -0.13, 0, Math.PI);
     this.torso.add(artifact);
 
-    // Capucha caída y capa corta teal en la espalda
-    this.mesh(new THREE.SphereGeometry(0.13, 14, 10), this.teal, this.torso, 0, 0.52, -0.17);
-    this.cape = this.mesh(new THREE.BoxGeometry(0.34, 0.4, 0.03), this.teal, this.torso, 0, 0.3, -0.25, 0.25);
+    // CAPUCHA-CAPA triangular en la espalda (vista trasera de la hoja):
+    // panel teal en punta con ribete dorado
+    this.hood = new THREE.Group();
+    this.hood.position.set(0, 0.5, -0.13);
+    // Cuello/capucha caída
+    this.mesh(new THREE.TorusGeometry(0.105, 0.045, 10, 18), this.teal, this.hood, 0, 0.0, 0.02, 0.5);
+    // Panel triangular (cono muy aplastado apuntando hacia abajo)
+    const panelBack = this.mesh(new THREE.ConeGeometry(0.17, 0.42, 4), this.teal, this.hood, 0, -0.24, -0.02, Math.PI, Math.PI / 4);
+    panelBack.scale.z = 0.16;
+    const trim = this.mesh(new THREE.ConeGeometry(0.185, 0.45, 4), this.gold, this.hood, 0, -0.235, -0.028, Math.PI, Math.PI / 4);
+    trim.scale.z = 0.1;
+    this.torso.add(this.hood);
   }
 
-  /** Brazos con pivote en el hombro: piel + brazalete teal/bronce + mano. */
+  // ------------------------------------------------------------------
+  // Brazos: hombro → bíceps con banda → codo → brazalete → mano
+  // ------------------------------------------------------------------
   private buildArms(): void {
     for (const side of [-1, 1]) {
-      const arm = new THREE.Group();
-      arm.position.set(0.27 * side, 1.12, 0); // hombro
-      // Manga corta crema
-      this.mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.14, 12), this.cream, arm, 0, -0.05, 0, 0, 0, 0.15 * side);
-      // Brazo
-      this.mesh(new THREE.CapsuleGeometry(0.06, 0.22, 6, 12), this.skin, arm, 0.02 * side, -0.2, 0);
-      // Brazalete teal con borde dorado
-      this.mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.11, 12), this.teal, arm, 0.025 * side, -0.31, 0);
-      this.mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.02, 12), this.gold, arm, 0.025 * side, -0.365, 0);
-      // Mano (un poco grande: lectura platformer)
-      this.mesh(new THREE.SphereGeometry(0.075, 12, 10), this.skin, arm, 0.03 * side, -0.43, 0);
-      if (side < 0) this.armL = arm; else this.armR = arm;
-      this.root.add(arm);
+      const shoulder = new THREE.Group();
+      shoulder.position.set(0.195 * side, 1.26, 0);
+      // Hombro de la túnica (sin manga: la hoja muestra brazos al aire)
+      this.mesh(new THREE.SphereGeometry(0.062, 12, 10), this.cream, shoulder, 0.005 * side, 0.01, 0);
+      // Bíceps + banda teal
+      this.mesh(new THREE.CapsuleGeometry(0.042, 0.14, 6, 12), this.skin, shoulder, 0.01 * side, -0.1, 0);
+      this.mesh(new THREE.CylinderGeometry(0.048, 0.05, 0.045, 12), this.teal, shoulder, 0.01 * side, -0.06, 0);
+
+      const elbow = new THREE.Group();
+      elbow.position.set(0.012 * side, -0.19, 0);
+      shoulder.add(elbow);
+      // Antebrazo + brazalete grueso teal con bordes dorados
+      this.mesh(new THREE.CapsuleGeometry(0.038, 0.1, 6, 12), this.skin, elbow, 0, -0.07, 0);
+      this.mesh(new THREE.CylinderGeometry(0.058, 0.066, 0.115, 14), this.teal, elbow, 0, -0.15, 0);
+      this.mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.018, 14), this.gold, elbow, 0, -0.095, 0);
+      this.mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.018, 14), this.gold, elbow, 0, -0.205, 0);
+      // Mano
+      this.mesh(new THREE.SphereGeometry(0.052, 12, 10), this.skin, elbow, 0, -0.26, 0);
+
+      if (side < 0) { this.shoulderL = shoulder; this.elbowL = elbow; }
+      else { this.shoulderR = shoulder; this.elbowR = elbow; }
+      this.root.add(shoulder);
     }
   }
 
-  /** Cabeza grande y expresiva con el pelo en puntas de la hoja de modelo. */
+  // ------------------------------------------------------------------
+  // Cabeza: proporción del concepto, ojos grandes, pelo voluminoso
+  // ------------------------------------------------------------------
   private buildHead(): void {
     this.head = new THREE.Group();
-    this.head.position.y = 1.46;
+    this.head.position.y = 1.52;
     this.root.add(this.head);
 
-    const skull = this.mesh(new THREE.SphereGeometry(0.3, 24, 18), this.skin, this.head, 0, 0, 0);
-    skull.scale.set(1, 0.98, 0.95);
+    // Cuello
+    this.mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.1, 12), this.skin, this.head, 0, -0.14, 0);
+    const skull = this.mesh(new THREE.SphereGeometry(0.165, 24, 18), this.skin, this.head, 0, 0, 0);
+    skull.scale.set(0.96, 1.04, 0.94);
+    // Mandíbula suave
+    this.mesh(new THREE.SphereGeometry(0.12, 16, 12), this.skin, this.head, 0, -0.07, 0.03);
 
     // Orejas
     for (const side of [-1, 1]) {
-      this.mesh(new THREE.SphereGeometry(0.05, 10, 8), this.skin, this.head, 0.29 * side, -0.02, 0);
+      this.mesh(new THREE.SphereGeometry(0.032, 10, 8), this.skin, this.head, 0.155 * side, -0.02, 0.01);
     }
 
-    // Ojos grandes: esclerótica + iris marrón + pupila + brillo
+    // Ojos grandes marrones (como el primer plano de la hoja)
     for (const side of [-1, 1]) {
-      const eye = this.mesh(new THREE.SphereGeometry(0.068, 14, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 }), this.head, 0.115 * side, 0.0, 0.245);
-      eye.scale.set(1, 1.25, 0.55);
-      this.mesh(new THREE.SphereGeometry(0.042, 12, 10),
-        new THREE.MeshStandardMaterial({ color: 0x6b3f1f, roughness: 0.3 }), this.head, 0.115 * side, 0.0, 0.282);
-      this.mesh(new THREE.SphereGeometry(0.02, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x140b06 }), this.head, 0.115 * side, 0.0, 0.305);
-      this.mesh(new THREE.SphereGeometry(0.011, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xffffff }), this.head, 0.13 * side, 0.025, 0.31);
-      // Ceja
-      this.mesh(new THREE.BoxGeometry(0.1, 0.022, 0.02), this.hair, this.head,
-        0.115 * side, 0.095, 0.27, 0, 0, -0.18 * side);
+      const white = this.mesh(new THREE.SphereGeometry(0.04, 14, 12),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }), this.head, 0.064 * side, -0.005, 0.135);
+      white.scale.set(1, 1.3, 0.5);
+      this.mesh(new THREE.SphereGeometry(0.026, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0x5a3217, roughness: 0.25 }), this.head, 0.064 * side, -0.005, 0.155);
+      this.mesh(new THREE.SphereGeometry(0.012, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x120904 }), this.head, 0.064 * side, -0.005, 0.168);
+      this.mesh(new THREE.SphereGeometry(0.006, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }), this.head, 0.073 * side, 0.008, 0.171);
+      // Cejas gruesas oscuras
+      this.mesh(new THREE.BoxGeometry(0.062, 0.016, 0.014), this.hair, this.head,
+        0.064 * side, 0.052, 0.15, 0, 0, -0.15 * side);
     }
-    // Nariz y sonrisa pequeña
-    this.mesh(new THREE.SphereGeometry(0.028, 8, 8), this.skin, this.head, 0, -0.06, 0.295);
-    this.mesh(new THREE.BoxGeometry(0.07, 0.014, 0.012),
-      new THREE.MeshBasicMaterial({ color: 0x8a5436 }), this.head, 0.012, -0.135, 0.275, 0, 0, -0.12);
+    // Nariz pequeña y sonrisa amable
+    this.mesh(new THREE.SphereGeometry(0.018, 8, 8), this.skin, this.head, 0, -0.045, 0.165);
+    this.mesh(new THREE.TorusGeometry(0.022, 0.005, 6, 10, Math.PI * 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x7c4526 }), this.head, 0.005, -0.085, 0.152, 0, 0, Math.PI + 0.25);
 
-    // Pelo en puntas: casquete + mechones cónicos hacia fuera
-    const cap = this.mesh(new THREE.SphereGeometry(0.305, 18, 14), this.hair, this.head, 0, 0.07, -0.03);
-    cap.scale.set(1.04, 0.92, 1.0);
+    // PELO: masa voluminosa castaño chocolate con puntas hacia fuera/arriba
+    const base = this.mesh(new THREE.SphereGeometry(0.175, 18, 14), this.hair, this.head, 0, 0.045, -0.02);
+    base.scale.set(1.05, 0.98, 1.02);
     const tufts: [number, number, number, number, number, number, number][] = [
-      // x, y, z, rotX, rotZ, radio, alto
-      [0, 0.3, 0.0, -0.3, 0, 0.13, 0.34],
-      [0.14, 0.28, 0.05, -0.2, -0.7, 0.1, 0.28],
-      [-0.14, 0.28, 0.05, -0.2, 0.7, 0.1, 0.28],
-      [0.2, 0.2, -0.12, -0.6, -1.0, 0.09, 0.26],
-      [-0.2, 0.2, -0.12, -0.6, 1.0, 0.09, 0.26],
-      [0.07, 0.26, -0.2, -1.0, -0.3, 0.1, 0.3],
-      [-0.07, 0.26, -0.2, -1.0, 0.3, 0.1, 0.3],
-      [0, 0.18, -0.27, -1.4, 0, 0.09, 0.26],
-      // Flequillo sobre la frente
-      [0.1, 0.18, 0.24, 0.9, -0.3, 0.07, 0.2],
-      [-0.1, 0.18, 0.24, 0.9, 0.3, 0.07, 0.2],
-      [0, 0.2, 0.26, 0.8, 0, 0.08, 0.22],
+      // x, y, z, rotX, rotZ, radio, alto — leídos del turnaround
+      [0, 0.19, -0.02, -0.25, 0, 0.075, 0.2],
+      [0.085, 0.175, 0.0, -0.15, -0.65, 0.06, 0.17],
+      [-0.085, 0.175, 0.0, -0.15, 0.65, 0.06, 0.17],
+      [0.13, 0.12, -0.05, -0.45, -1.05, 0.055, 0.16],
+      [-0.13, 0.12, -0.05, -0.45, 1.05, 0.055, 0.16],
+      [0.05, 0.16, -0.12, -0.85, -0.35, 0.06, 0.18],
+      [-0.05, 0.16, -0.12, -0.85, 0.35, 0.06, 0.18],
+      [0, 0.1, -0.17, -1.35, 0, 0.055, 0.17],
+      [0.1, 0.08, -0.15, -1.1, -0.8, 0.05, 0.15],
+      [-0.1, 0.08, -0.15, -1.1, 0.8, 0.05, 0.15],
+      // Flequillo desordenado sobre la frente
+      [0.06, 0.12, 0.13, 0.75, -0.35, 0.042, 0.12],
+      [-0.06, 0.12, 0.13, 0.75, 0.35, 0.042, 0.12],
+      [0, 0.13, 0.145, 0.65, 0.05, 0.048, 0.13],
+      [0.115, 0.09, 0.1, 0.55, -0.7, 0.038, 0.11],
+      [-0.115, 0.09, 0.1, 0.55, 0.7, 0.038, 0.11],
     ];
     for (const [x, y, z, rx, rz, r, h] of tufts) {
       this.mesh(new THREE.ConeGeometry(r, h, 7), this.hair, this.head, x, y, z, rx, 0, rz);
     }
-    // Patillas
+    // Patillas finas
     for (const side of [-1, 1]) {
-      this.mesh(new THREE.ConeGeometry(0.05, 0.16, 6), this.hair, this.head,
-        0.27 * side, 0.02, 0.08, Math.PI, 0, 0.12 * side);
+      this.mesh(new THREE.ConeGeometry(0.026, 0.1, 6), this.hair, this.head,
+        0.15 * side, -0.01, 0.05, Math.PI, 0, 0.1 * side);
     }
   }
 
   // ------------------------------------------------------------------
-  // Animación procedural
+  // Animación procedural con rodillas y codos
   // ------------------------------------------------------------------
-
   update(dt: number, pose: MaelPose): void {
     this.time += dt;
     const lerp = (cur: number, target: number, k: number) =>
       cur + (target - cur) * Math.min(k * dt, 1);
 
     const runFactor = THREE.MathUtils.clamp(pose.speed / 7, 0, 1);
-    this.runPhase += dt * (4 + pose.speed * 1.6);
+    this.runPhase += dt * (4 + pose.speed * 1.7);
 
-    let legSwingL = 0, legSwingR = 0, armSwingL = 0, armSwingR = 0;
-    let armLiftL = 0, armLiftR = 0, headTilt = 0, capeLift = 0.25;
+    let thighSwingL = 0, thighSwingR = 0, kneeBendL = 0.05, kneeBendR = 0.05;
+    let armSwingL = 0, armSwingR = 0, armLiftL = 0.08, armLiftR = -0.08;
+    let elbowBendL = -0.25, elbowBendR = -0.25, headTilt = 0, hoodLift = 0;
 
     if (pose.attacking && pose.attackKind === 'spin') {
-      // Brazos en cruz durante el giro
-      armLiftL = 1.45; armLiftR = -1.45;
+      armLiftL = 1.5; armLiftR = -1.5; elbowBendL = elbowBendR = -0.1;
     } else if (pose.attacking && pose.attackKind === 'punch') {
-      // Puñetazo: brazo derecho al frente, izquierdo atrás
-      armSwingR = -1.5; armSwingL = 0.7;
+      armSwingR = -1.55; elbowBendR = -0.05;  // brazo derecho extendido
+      armSwingL = 0.6; elbowBendL = -0.9;
+      headTilt = 0.12;
     } else if (pose.pounding) {
-      // Ground pound: puños abajo, piernas recogidas
-      legSwingL = legSwingR = -1.1;
-      armLiftL = 0.5; armLiftR = -0.5;
+      thighSwingL = thighSwingR = -1.0; kneeBendL = kneeBendR = 1.4;
+      armLiftL = 0.4; armLiftR = -0.4; armSwingL = armSwingR = 0.5;
       headTilt = 0.35;
     } else if (!pose.grounded) {
       if (pose.velocityY > 1) {
-        // Subiendo: pierna delante, brazos arriba (salto heroico)
-        legSwingL = -0.9; legSwingR = 0.5;
-        armSwingL = 0.8; armSwingR = 0.8;
-        armLiftL = 0.45; armLiftR = -0.45;
-        capeLift = 0.7;
+        // Salto heroico: pierna delantera flexionada, brazos arriba
+        thighSwingL = -1.0; kneeBendL = 1.2;
+        thighSwingR = 0.45; kneeBendR = 0.25;
+        armSwingL = 0.7; armSwingR = 0.7; armLiftL = 0.5; armLiftR = -0.5;
+        elbowBendL = elbowBendR = -0.6;
+        hoodLift = 0.5;
       } else {
-        // Cayendo: brazos abiertos equilibrando
-        legSwingL = -0.3; legSwingR = 0.3;
-        armLiftL = 0.9; armLiftR = -0.9;
-        headTilt = -0.15;
-        capeLift = 0.9;
+        // Caída: brazos abiertos equilibrando, piernas semiflexionadas
+        thighSwingL = -0.35; kneeBendL = 0.6;
+        thighSwingR = 0.25; kneeBendR = 0.4;
+        armLiftL = 1.0; armLiftR = -1.0; elbowBendL = elbowBendR = -0.3;
+        headTilt = -0.12; hoodLift = 0.75;
       }
     } else if (runFactor > 0.05) {
-      // Ciclo de carrera: piernas y brazos en oposición
-      const swing = Math.sin(this.runPhase) * (0.55 + runFactor * 0.45);
-      legSwingL = swing; legSwingR = -swing;
-      armSwingL = -swing * 0.7; armSwingR = swing * 0.7;
+      // Carrera con flexión natural de rodilla y codos doblados
+      const swing = Math.sin(this.runPhase) * (0.5 + runFactor * 0.45);
+      thighSwingL = swing; thighSwingR = -swing;
+      kneeBendL = Math.max(0.08, -Math.sin(this.runPhase + 0.6)) * (0.5 + runFactor * 0.7);
+      kneeBendR = Math.max(0.08, Math.sin(this.runPhase + 0.6)) * (0.5 + runFactor * 0.7);
+      armSwingL = -swing * 0.8; armSwingR = swing * 0.8;
+      elbowBendL = elbowBendR = -0.7 - runFactor * 0.3;
       headTilt = 0.12 * runFactor;
-      capeLift = 0.25 + runFactor * 0.5;
+      hoodLift = 0.2 + runFactor * 0.45;
     } else {
-      // Idle: respiración y balanceo sutil
-      const breathe = Math.sin(this.time * 2.2);
-      armSwingL = armSwingR = breathe * 0.05;
-      this.torso.scale.y = 1 + breathe * 0.012;
-      headTilt = Math.sin(this.time * 1.1) * 0.04;
+      // Idle: respiración tranquila
+      const breathe = Math.sin(this.time * 2.1);
+      armSwingL = armSwingR = breathe * 0.04;
+      this.torso.scale.y = 1 + breathe * 0.01;
+      headTilt = Math.sin(this.time * 1.05) * 0.04;
+      kneeBendL = kneeBendR = 0.04;
     }
 
-    this.legL.rotation.x = lerp(this.legL.rotation.x, legSwingL, 14);
-    this.legR.rotation.x = lerp(this.legR.rotation.x, legSwingR, 14);
-    this.armL.rotation.x = lerp(this.armL.rotation.x, armSwingL, 14);
-    this.armR.rotation.x = lerp(this.armR.rotation.x, armSwingR, 14);
-    this.armL.rotation.z = lerp(this.armL.rotation.z, armLiftL, 12);
-    this.armR.rotation.z = lerp(this.armR.rotation.z, armLiftR, 12);
+    this.thighL.rotation.x = lerp(this.thighL.rotation.x, thighSwingL, 14);
+    this.thighR.rotation.x = lerp(this.thighR.rotation.x, thighSwingR, 14);
+    this.kneeL.rotation.x = lerp(this.kneeL.rotation.x, kneeBendL, 14);
+    this.kneeR.rotation.x = lerp(this.kneeR.rotation.x, kneeBendR, 14);
+    this.shoulderL.rotation.x = lerp(this.shoulderL.rotation.x, armSwingL, 14);
+    this.shoulderR.rotation.x = lerp(this.shoulderR.rotation.x, armSwingR, 14);
+    this.shoulderL.rotation.z = lerp(this.shoulderL.rotation.z, armLiftL, 12);
+    this.shoulderR.rotation.z = lerp(this.shoulderR.rotation.z, armLiftR, 12);
+    this.elbowL.rotation.x = lerp(this.elbowL.rotation.x, elbowBendL, 12);
+    this.elbowR.rotation.x = lerp(this.elbowR.rotation.x, elbowBendR, 12);
     this.head.rotation.x = lerp(this.head.rotation.x, headTilt, 10);
-    this.cape.rotation.x = lerp(this.cape.rotation.x, capeLift, 8);
+    this.hood.rotation.x = lerp(this.hood.rotation.x, hoodLift, 8);
 
-    // Rebote vertical del cuerpo al correr (los pies "empujan")
+    // Rebote del cuerpo al correr
     if (pose.grounded && runFactor > 0.05) {
-      this.root.position.y = Math.abs(Math.sin(this.runPhase)) * 0.05;
+      this.root.position.y = Math.abs(Math.sin(this.runPhase)) * 0.045;
     } else {
       this.root.position.y = lerp(this.root.position.y, 0, 10);
     }
