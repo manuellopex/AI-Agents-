@@ -66,6 +66,11 @@ export class GameManager {
 
   // Estado de aventura
   private faroDone = false;
+  private playerInCave = false;
+  private notesCollected = 0;
+  /** Arena de oleadas: -1 inactiva, 0-2 oleada en curso, 3 completada. */
+  private arenaWave = -1;
+  private arenaBaseline = 0;
   private storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
   private triggerCooldowns = new Map<string, number>();
   private secretsFound = new Set<string>();
@@ -225,6 +230,9 @@ export class GameManager {
     this.destellos.spawnVisual('faro', this.level.faroDestelloPos);
 
     this.faroDone = false;
+    this.playerInCave = false;
+    this.notesCollected = 0;
+    this.arenaWave = -1;
     this.health.reset();
     this.storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
     this.triggerCooldowns.clear();
@@ -273,7 +281,7 @@ export class GameManager {
     };
 
     // --- Enemigos ---
-    this.enemies.onPlayerHit = (enemyPos) => this.hurtPlayer(enemyPos, '¡Cuidado con los Grubs!');
+    this.enemies.onPlayerHit = (enemyPos) => this.hurtPlayer(enemyPos, '¡Cuidado con los Coquíl Sprigs!');
     this.enemies.onStomped = () => {
       this.player.velocity.y = 11; // rebote satisfactorio
       this.audio.playJump();
@@ -326,6 +334,8 @@ export class GameManager {
     // --- Destellos de Auralis (el objetivo) ---
     this.destellos.onCollect = (def, count) => {
       this.audio.playDestello();
+      // Estados visuales del faro: se va cargando con cada Destello
+      this.level.setFaroCharge(count);
       this.ui.setDestellos(count, this.destellos.required, this.faroDone ? this.destellos.total : undefined);
       this.ui.showBanner(`⭐ ¡${def.nombre}!`);
       if (count >= this.destellos.required && !this.faroDone) {
@@ -438,15 +448,34 @@ export class GameManager {
           break;
         case 'quiries':
           this.secretsFound.add('quiries');
-          this.ui.say('Quirí', '♪ Perdimos nuestras 5 notas de luz… vuelve pronto, viajero ♪', 4200);
+          if (this.destellos.isComplete('quiries')) break;
+          if (this.notesCollected >= 5) {
+            // Misión completada: el altar libera el Canto de los Quiríes
+            this.audio.playPurify();
+            this.destellos.spawnVisual('quiries', this.level.quiriDestelloPos);
+            this.ui.say('Quirí', '♪ ¡Nuestras notas! La arboleda vuelve a cantar contigo ♪', 4200);
+          } else {
+            this.ui.say('Quirí', `♪ Perdimos 5 Notas de Luz… llevas ${this.notesCollected}/5. Busca en árbol, ruinas, cueva, cascada y altura ♪`, 4600);
+          }
           break;
         case 'desafio':
           this.secretsFound.add('desafio');
-          this.ui.say('Elaria', 'El santuario del desafío aún duerme. Su reto despertará pronto.');
+          if (this.destellos.isComplete('desafio') || this.arenaWave >= 0) break;
+          // Arranca la arena de oleadas (baseline = enemigos del mundo vivos)
+          this.arenaWave = 0;
+          this.arenaBaseline = this.enemies.aliveCount;
+          this.spawnArenaWave();
+          this.ui.say('Elaria', 'El santuario despierta… ¡resiste sus tres oleadas, Mael!');
           break;
         case 'cueva':
           this.secretsFound.add('cueva');
-          this.ui.say('Oryn', '¡Una puerta tras la cascada! Sellada… La Cueva Azul guarda algo.');
+          // Entrar a la Cueva Azul (tras la cascada)
+          this.playerInCave = true;
+          this.player.group.position.copy(this.level.caveInsidePos);
+          this.player.velocity.set(0, 0, 0);
+          this.cameraCtrl.snapTo(this.player.position);
+          this.audio.playPurify();
+          this.ui.say('Oryn', 'La Cueva Azul… ¡mira esos cristales! Pisa las dos placas brillantes.');
           break;
       }
     }
@@ -474,6 +503,12 @@ export class GameManager {
       this.ui.say('Elaria', 'La luz no estaba perdida. Solo esperaba que alguien la reuniera.', 3600);
       this.effects.burst(crystalPos, 0xffe9a0, 18, 6);
     }, 3000));
+    // Paso 5 del LDD: la luz purifica la isla (flores brotan en el hub)
+    this.introTimers.push(setTimeout(() => {
+      this.level.purifyIsland();
+      this.audio.playPurify();
+      this.ui.showBanner('🌺 La isla respira de nuevo', 'purified');
+    }, 5200));
     this.introTimers.push(setTimeout(() => {
       this.state = 'faro';
       this.input.setVisible(false);
@@ -513,6 +548,115 @@ export class GameManager {
     );
   }
 
+  /** Cueva Azul: placas de presión → puente cristalino → cofre → salida. */
+  private updateCave(): void {
+    if (!this.playerInCave) return;
+    const p = this.player.position;
+
+    // Placas de presión
+    for (const plate of this.level.cavePlates) {
+      if (plate.pressed) continue;
+      if (p.distanceTo(plate.pos) < 1.0 && this.player.grounded) {
+        this.level.pressPlate(plate);
+        this.audio.playPickup();
+        this.effects.ring(plate.pos.clone(), 0x2ec4b6, 1.6);
+        const remaining = this.level.cavePlates.filter((pl) => !pl.pressed).length;
+        if (remaining === 0 && !this.level.caveBridgeOpen) {
+          this.level.openCaveBridge();
+          this.audio.playPurify();
+          this.ui.say('Oryn', '¡El puente de cristal! Sabía que esas placas hacían algo.');
+        } else if (remaining > 0) {
+          this.ui.say('Oryn', `Una placa encendida… falta ${remaining}.`);
+        }
+      }
+    }
+
+    // Cofre del Destello (se abre con un ataque cerca)
+    if (this.level.caveBridgeOpen && !this.level.caveChestOpened && this.player.attacking) {
+      if (p.distanceTo(this.level.caveChestPos) < 2.2) {
+        this.level.openCaveChest();
+        this.audio.playBreak();
+        this.effects.burst(this.level.caveChestPos.clone(), 0xffd34d, 16, 5);
+        // Lumas del cofre + el Eco del Santuario
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          this.collectibles.spawnCrystal(this.level.caveChestPos.clone()
+            .add(new THREE.Vector3(Math.cos(a) * 0.9, 0.4, Math.sin(a) * 0.9)));
+        }
+        setTimeout(() => this.destellos.spawnVisual('cueva', this.level.caveDestelloPos), 700);
+      }
+    }
+
+    // Portal de salida
+    if (p.distanceTo(this.level.caveExitPos) < 1.6) {
+      this.triggerCooldowns.set('cueva', 6);
+      this.playerInCave = false;
+      this.player.group.position.copy(this.level.caveOutsidePos);
+      this.player.velocity.set(0, 0, 0);
+      this.cameraCtrl.snapTo(this.player.position);
+      this.audio.playQuiri();
+    }
+  }
+
+  /** Notas de Luz: recogida por proximidad con progreso en pantalla. */
+  private updateNotes(): void {
+    if (this.notesCollected >= 5) return;
+    const p = this.player.position;
+    for (const note of this.level.notes) {
+      if (note.collected) continue;
+      if (p.distanceTo(note.group.position) < 1.5) {
+        note.collected = true;
+        note.group.visible = false;
+        this.notesCollected++;
+        this.audio.playQuiri();
+        this.effects.burst(note.group.position.clone(), 0xffe28a, 10, 4);
+        this.ui.showBanner(`♪ Nota de Luz ${this.notesCollected}/5`, 'auralis', 1800);
+        if (this.notesCollected >= 5) {
+          this.ui.say('Oryn', '¡Las cinco notas! Llévaselas a los Quiríes de la arboleda.');
+        }
+      }
+    }
+  }
+
+  /** Arena del Santuario del Desafío: tres oleadas de Coquíls. */
+  private spawnArenaWave(): void {
+    const count = 3 + this.arenaWave; // 3, 4, 5
+    const c = this.level.arenaCenter;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + this.arenaWave;
+      const x = c.x + Math.cos(a) * 3.6;
+      const z = c.z + Math.sin(a) * 3.2;
+      this.enemies.spawn({
+        pointA: new THREE.Vector3(x, 1, z),
+        pointB: new THREE.Vector3(c.x + Math.cos(a + 1.5) * 2.2, 1, c.z + Math.sin(a + 1.5) * 2),
+      });
+    }
+    this.level.setArenaWave(this.arenaWave + 1);
+    this.audio.playCharge();
+    this.ui.showBanner(`Oleada ${this.arenaWave + 1} / 3`, 'auralis', 2000);
+  }
+
+  private updateArena(): void {
+    if (this.arenaWave < 0 || this.arenaWave >= 3) return;
+    if (this.enemies.aliveCount > this.arenaBaseline) return;
+    this.arenaBaseline = Math.min(this.arenaBaseline, this.enemies.aliveCount);
+    // Oleada superada
+    this.arenaWave++;
+    if (this.arenaWave < 3) {
+      this.spawnArenaWave();
+    } else {
+      this.audio.playPurify();
+      this.ui.say('Elaria', 'Tres oleadas. El santuario reconoce tu valor.');
+      this.destellos.spawnVisual('desafio', this.level.arenaDestelloPos);
+      // Lumas raros de recompensa
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        this.collectibles.spawnCrystal(this.level.arenaCenter.clone()
+          .add(new THREE.Vector3(Math.cos(a) * 2, 1.2, Math.sin(a) * 2)));
+      }
+    }
+  }
+
   // ------------------------------------------------------------------
   // Bucle principal
   // ------------------------------------------------------------------
@@ -539,6 +683,9 @@ export class GameManager {
       this.liora.update(dt, this.player.position, this.destellos.count / this.destellos.required);
       this.cameraCtrl.update(dt, this.player.position, this.player.velocity);
       this.updateInteractions(dt);
+      this.updateCave();
+      this.updateNotes();
+      this.updateArena();
       this.storyMoments();
 
       this.quiriTimer -= dt;

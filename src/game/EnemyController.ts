@@ -106,13 +106,25 @@ export class EnemyController {
   /** Llamado cuando el jugador aplasta a un enemigo cayendo encima. */
   onStomped: (() => void) | null = null;
 
+  private scene: THREE.Scene;
+
   constructor(scene: THREE.Scene, effects: Effects, defs: EnemyDef[]) {
+    this.scene = scene;
     this.effects = effects;
-    for (const def of defs) {
-      const enemy = new Grub(def);
-      this.enemies.push(enemy);
-      scene.add(enemy.group);
-    }
+    for (const def of defs) this.spawn(def);
+  }
+
+  /** Añade un enemigo en runtime (oleadas del Santuario del Desafío). */
+  spawn(def: EnemyDef): void {
+    const enemy = new Grub(def);
+    this.enemies.push(enemy);
+    this.scene.add(enemy.group);
+    this.effects.burst(def.pointA.clone().add(new THREE.Vector3(0, 0.6, 0)), 0xb25bd6, 10, 3);
+  }
+
+  /** Enemigos vivos actualmente (las oleadas esperan a que llegue a 0). */
+  get aliveCount(): number {
+    return this.enemies.filter((e) => e.alive).length;
   }
 
   update(dt: number, playerPosition: THREE.Vector3, playerVelocityY = 0): void {

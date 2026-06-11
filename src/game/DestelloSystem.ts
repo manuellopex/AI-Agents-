@@ -33,9 +33,9 @@ export class DestelloSystem {
     { id: 'faro', nombre: 'Destello del Faro', tipo: 'Plataformas verticales', disponible: true },
     { id: 'coral', nombre: 'Destello del Coral Dormido', tipo: 'Combate ambiental', disponible: true },
     { id: 'oryn', nombre: 'Destello de Oryn', tipo: 'Secreto guiado', disponible: true },
-    { id: 'quiries', nombre: 'Destello de los Quiríes', tipo: 'Mini-misión', disponible: false },
-    { id: 'cueva', nombre: 'Destello de la Cueva Azul', tipo: 'Puzzle secreto', disponible: false },
-    { id: 'desafio', nombre: 'Destello del Desafío de Mael', tipo: 'Reto cronometrado', disponible: false },
+    { id: 'quiries', nombre: 'Canto de los Quiríes', tipo: 'Mini-misión: 5 Notas de Luz', disponible: true },
+    { id: 'cueva', nombre: 'Eco del Santuario', tipo: 'Puzzle de la Cueva Azul', disponible: true },
+    { id: 'desafio', nombre: 'Destello del Desafío', tipo: 'Arena de oleadas', disponible: true },
   ];
 
   /** Destellos necesarios para activar el Faro del Alba. */

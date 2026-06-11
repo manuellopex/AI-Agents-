@@ -81,6 +81,31 @@ export class LevelManager {
   readonly westBounds = { minX: -34, maxX: -18, minZ: -11, maxZ: 3 };
   readonly coralDestelloPos = new THREE.Vector3(-26, 2.2, -4);
 
+  // --- Cueva Azul (sala interior tras la cascada, LDD área 3) ---
+  /** Punto de aparición dentro de la cueva y de retorno al exterior. */
+  readonly caveInsidePos = new THREE.Vector3(51, 7.1, -18);
+  readonly caveOutsidePos = new THREE.Vector3(7, 4.2, -21);
+  readonly caveExitPos = new THREE.Vector3(50, 7.1, -14.5);
+  readonly cavePlates: { mesh: THREE.Mesh; pressed: boolean; pos: THREE.Vector3 }[] = [];
+  readonly caveChestPos = new THREE.Vector3(65, 7.6, -18);
+  readonly caveDestelloPos = new THREE.Vector3(65, 9, -18);
+  private caveBridge!: THREE.Mesh;
+  private caveChestLid!: THREE.Mesh;
+  caveBridgeOpen = false;
+  caveChestOpened = false;
+
+  // --- Notas de Luz de los Quiríes (LDD área 6) ---
+  readonly notes: { group: THREE.Group; collected: boolean; position: THREE.Vector3 }[] = [];
+  readonly quiriAltarPos = new THREE.Vector3(10.5, 1, 3.5);
+  readonly quiriDestelloPos = new THREE.Vector3(10.5, 3.2, 3.5);
+
+  // --- Santuario del Desafío: arena de oleadas (LDD §8) ---
+  readonly arenaCenter = new THREE.Vector3(-11, 1, 6);
+  readonly arenaDestelloPos = new THREE.Vector3(-11, 3.4, 6);
+  private braziers: THREE.Mesh[] = [];
+
+  private faroCrystalMat!: THREE.MeshStandardMaterial;
+
   // --- Secreto de Oryn (este) ---
   readonly orynZoneCenter = new THREE.Vector3(26, 1.2, -6);
   readonly orynZoneRadius = 11;
@@ -119,6 +144,8 @@ export class LevelManager {
     this.buildVista();
     this.buildDecorations();
     this.buildShrines();
+    this.buildCave();
+    this.buildNotes();
     this.buildCrates();
     this.buildPads();
     this.buildGlimmers();
@@ -247,10 +274,8 @@ export class LevelManager {
     this.groundMeshes.push(top);
 
     // Cristal del faro (se enciende al activarlo)
-    this.faroCrystal = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.9),
-      new THREE.MeshStandardMaterial({ color: 0x9fb8c8, emissive: 0x223344, emissiveIntensity: 0.3 }),
-    );
+    this.faroCrystalMat = new THREE.MeshStandardMaterial({ color: 0x9fb8c8, emissive: 0x223344, emissiveIntensity: 0.3 });
+    this.faroCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), this.faroCrystalMat);
     this.faroCrystal.position.set(0, 16.6, -26);
     this.group.add(this.faroCrystal);
 
@@ -390,25 +415,48 @@ export class LevelManager {
       [grove.x - 0.4, 2.2, grove.z + 0.3], [grove.x + 0.5, 2.1, grove.z], [grove.x, 2.4, grove.z - 0.4],
     ]);
     this.triggers.push({ id: 'quiries', position: grove.clone(), radius: 2.8 });
+    this.checkpoints.push(new THREE.Vector3(8, 1, 2));
 
-    // Santuario del Desafío de Mael (dormido por ahora)
+    // Santuario del Desafío: arena de oleadas (LDD §8)
     const shrine = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, 1.2, 6), this.matStone);
     shrine.position.set(-11, 1.6, 6);
     this.group.add(shrine);
-    const dimCrystal = new THREE.Mesh(
+    const shrineCrystal = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.35),
-      new THREE.MeshStandardMaterial({ color: 0x8a93a8, emissive: 0x202838, emissiveIntensity: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: 0xffb070, emissive: 0x803010, emissiveIntensity: 0.6 }),
     );
-    dimCrystal.position.set(-11, 2.6, 6);
-    this.group.add(dimCrystal);
+    shrineCrystal.position.set(-11, 2.6, 6);
+    this.group.add(shrineCrystal);
+    // Anillo de la arena + braseros que se encienden por oleada
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.12, 8, 36),
+      new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: 0.8 }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(-11, 1.06, 6);
+    this.group.add(ring);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.5;
+      const bx = -11 + Math.cos(a) * 4.6;
+      const bz = 6 + Math.sin(a) * 4.0;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 1.3, 8), this.matStone);
+      post.position.set(bx, 1.65, bz);
+      this.group.add(post);
+      const brazier = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x553322, emissive: 0x202020, emissiveIntensity: 0.3 }));
+      brazier.position.set(bx, 2.4, bz);
+      this.group.add(brazier);
+      this.braziers.push(brazier);
+      this.obstacles.push({ position: new THREE.Vector3(bx, 1, bz), radius: 0.35 });
+    }
     this.triggers.push({ id: 'desafio', position: new THREE.Vector3(-11, 1, 6), radius: 2.5 });
     this.obstacles.push({ position: new THREE.Vector3(-11, 1, 6), radius: 1.1 });
+    this.checkpoints.push(new THREE.Vector3(-11, 1, 9.5));
   }
 
   private buildPads(): void {
-    // Atajo del hub al acantilado del faro + rebote en la playa oeste
+    // Atajos del LDD: faro→hub (pad de subida), cueva→hub y sendero→arboleda
     this.addPad(4.5, 1, -11.5, 15);
     this.addPad(-19, 0.8, 2, 12);
+    this.addPad(21, 1.2, -1, 13); // Sendero de Oryn → Arboleda de los Quiríes
   }
 
   private addPad(x: number, yGround: number, z: number, power: number): void {
@@ -427,6 +475,176 @@ export class LevelManager {
   // ------------------------------------------------------------------
   // Eventos del mundo (purificación, excavación, faro)
   // ------------------------------------------------------------------
+
+  /**
+   * Cueva Azul: santuario cristalino interior (sala elevada y apartada,
+   * se entra por teletransporte tras la cascada). Puzzle del LDD: 2 placas
+   * de presión → puente cristalino temporal → cofre del Destello.
+   */
+  private buildCave(): void {
+    const darkStone = new THREE.MeshStandardMaterial({ color: 0x3a4a5c, roughness: 0.9 });
+    const crystalMat = new THREE.MeshStandardMaterial({
+      color: 0x6fd8ff, emissive: 0x2090c0, emissiveIntensity: 1.1, roughness: 0.3,
+    });
+    // Suelo principal + saliente del cofre (con foso entre ambos)
+    this.addPlatform(54, 7, -18, 11, 1.2, 14, darkStone);
+    this.addPlatform(64.5, 7, -18, 6, 1.2, 10, darkStone);
+    // Paredes y techo: lectura de "sala interior"
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2c3a48, roughness: 1 });
+    for (const [x, z, w, d] of [[57.5, -26, 21, 1.5], [57.5, -10, 21, 1.5], [47.5, -18, 1.5, 16], [68, -18, 1.5, 16]] as const) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 7, d), wallMat);
+      wall.position.set(x, 9.5, z);
+      this.group.add(wall);
+    }
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(23, 0.6, 17), wallMat);
+    ceiling.position.set(57.5, 13.3, -18);
+    this.group.add(ceiling);
+    // Cristales gigantes que iluminan la cueva
+    for (const [x, y, z, sc] of [[51, 7.6, -23, 1.1], [55, 7.6, -12.5, 0.8], [63, 7.6, -22.5, 1.3], [49.5, 7.6, -14, 0.7]] as const) {
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(sc), crystalMat);
+      crystal.position.set(x, y + sc * 0.6, z);
+      crystal.rotation.set(0.3, Math.random() * 3, 0.2);
+      this.group.add(crystal);
+      this.obstacles.push({ position: new THREE.Vector3(x, y, z), radius: sc * 0.8 });
+    }
+    const light1 = new THREE.PointLight(0x4db8e8, 1.6, 16);
+    light1.position.set(54, 10, -18);
+    this.group.add(light1);
+    const light2 = new THREE.PointLight(0x4db8e8, 1.2, 12);
+    light2.position.set(64, 10, -18);
+    this.group.add(light2);
+
+    // Placas de presión (se hunden y encienden al pisarlas)
+    for (const [x, z] of [[53, -23], [53, -13]] as const) {
+      const plate = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.9, 0.18, 12),
+        new THREE.MeshStandardMaterial({ color: 0x7a92a8, emissive: 0x101820, emissiveIntensity: 0.5 }),
+      );
+      plate.position.set(x, 7.68, z);
+      this.group.add(plate);
+      this.cavePlates.push({ mesh: plate, pressed: false, pos: new THREE.Vector3(x, 7.6, z) });
+    }
+
+    // Puente cristalino (oculto hasta resolver las placas)
+    this.caveBridge = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.35, 3.2),
+      new THREE.MeshStandardMaterial({
+        color: 0x9fe8ff, emissive: 0x3aa8d8, emissiveIntensity: 0.8, transparent: true, opacity: 0.85,
+      }));
+    this.caveBridge.position.set(60.3, 7.4, -18);
+    this.caveBridge.visible = false;
+    this.group.add(this.caveBridge);
+
+    // Cofre del Destello
+    const chestMat = new THREE.MeshStandardMaterial({ color: 0x8a6238, roughness: 0.7 });
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.8), chestMat);
+    chest.position.set(65, 7.95, -18);
+    this.group.add(chest);
+    this.caveChestLid = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.25, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0xc89638, metalness: 0.5, roughness: 0.4 }));
+    this.caveChestLid.position.set(65, 8.42, -18);
+    this.group.add(this.caveChestLid);
+
+    // Portal de salida (disco brillante en la pared oeste)
+    const exitPortal = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.2, 14), crystalMat);
+    exitPortal.rotation.z = Math.PI / 2;
+    exitPortal.position.set(48.6, 8.4, -14.5);
+    this.group.add(exitPortal);
+
+    this.checkpoints.push(this.caveInsidePos.clone());
+  }
+
+  /** Abre el puente cristalino de la cueva. */
+  openCaveBridge(): void {
+    this.caveBridgeOpen = true;
+    this.caveBridge.visible = true;
+    this.groundMeshes.push(this.caveBridge);
+  }
+
+  /** Marca una placa como pisada (se hunde y se enciende). */
+  pressPlate(plate: { mesh: THREE.Mesh; pressed: boolean }): void {
+    plate.pressed = true;
+    plate.mesh.position.y -= 0.08;
+    (plate.mesh.material as THREE.MeshStandardMaterial).emissive.set(0x2ec4b6);
+    (plate.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.2;
+  }
+
+  /** Abre el cofre de la Cueva Azul. */
+  openCaveChest(): void {
+    this.caveChestOpened = true;
+    this.caveChestLid.rotation.x = -1.1;
+    this.caveChestLid.position.add(new THREE.Vector3(0, 0.1, -0.35));
+  }
+
+  /** Las 5 Notas de Luz de los Quiríes, escondidas según la misión:
+   *  árbol, ruinas, cueva, cascada y plataforma elevada. */
+  private buildNotes(): void {
+    const noteMat = new THREE.MeshStandardMaterial({
+      color: 0xffe9a0, emissive: 0xffb820, emissiveIntensity: 1.2, roughness: 0.3,
+    });
+    const spots: [number, number, number][] = [
+      [-12, 3.6, 6],        // 1. copa del árbol grande del hub
+      [29, 2.6, -1.5],      // 2. entre las ruinas del este
+      [62, 8.6, -22.5],     // 3. dentro de la Cueva Azul
+      [8.2, 4.7, -24.5],    // 4. detrás de la cascada
+      [3.1, 10.6, -29],     // 5. plataforma elevada de la espiral
+    ];
+    for (const [x, y, z] of spots) {
+      const note = new THREE.Group();
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), noteMat);
+      head.scale.set(1, 0.75, 1);
+      head.rotation.z = -0.4;
+      note.add(head);
+      const stem = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.5, 0.045), noteMat);
+      stem.position.set(0.13, 0.28, 0);
+      note.add(stem);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.045), noteMat);
+      flag.position.set(0.24, 0.49, 0);
+      flag.rotation.z = -0.4;
+      note.add(flag);
+      note.position.set(x, y, z);
+      this.group.add(note);
+      this.notes.push({ group: note, collected: false, position: new THREE.Vector3(x, y, z) });
+    }
+  }
+
+  /** Enciende los braseros de la arena según la oleada (0-3). */
+  setArenaWave(wave: number): void {
+    this.braziers.forEach((brazier, i) => {
+      const mat = brazier.material as THREE.MeshStandardMaterial;
+      if (i < wave) {
+        mat.emissive.set(0xff8a30);
+        mat.emissiveIntensity = 1.4;
+      } else {
+        mat.emissive.set(0x202020);
+        mat.emissiveIntensity = 0.3;
+      }
+    });
+  }
+
+  /**
+   * Estados visuales del faro (LDD §6): apagado → parcialmente cargado →
+   * listo para activar → activado. charge = Destellos colocados (0-3).
+   */
+  setFaroCharge(charge: number): void {
+    const t = Math.min(charge / 3, 1);
+    this.faroCrystalMat.color.lerpColors(new THREE.Color(0x9fb8c8), new THREE.Color(0xffe9a0), t);
+    this.faroCrystalMat.emissive.lerpColors(new THREE.Color(0x223344), new THREE.Color(0xffaa00), t);
+    this.faroCrystalMat.emissiveIntensity = 0.3 + t * 0.9;
+  }
+
+  /** Purificación final de la isla: flores y brillos por todo el hub. */
+  purifyIsland(): void {
+    const mats = [0xf2917e, 0xffd34d, 0xe85a8a, 0x9fe8ff].map(
+      (c) => new THREE.MeshStandardMaterial({ color: c }),
+    );
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const r = 5 + (i % 3) * 3.2;
+      const flower = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), mats[i % 4]);
+      flower.position.set(Math.cos(a) * r, 1.12, Math.sin(a) * r * 0.85);
+      this.group.add(flower);
+    }
+  }
 
   /** Purifica la playa oeste: flores, brillos y color de vuelta. */
   purifyWestZone(): void {
@@ -697,27 +915,58 @@ export class LevelManager {
     this.crates.push({ mesh, obstacle, broken: false });
   }
 
-  /** Lumas repartidos por todos los caminos: guían y recompensan, no mandan. */
+  /** Línea de Lumas entre dos puntos. */
+  private lumaLine(ax: number, ay: number, az: number, bx: number, by: number, bz: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      this.crystalPositions.push(new THREE.Vector3(
+        ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t));
+    }
+  }
+
+  /** Anillo de Lumas alrededor de un punto. */
+  private lumaRing(cx: number, y: number, cz: number, r: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      this.crystalPositions.push(new THREE.Vector3(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r * 0.85));
+    }
+  }
+
+  /**
+   * Distribución de Lumas según el LDD §8: ruta principal la más densa,
+   * faro, cueva, secretos en bordes y atajos, y opcionales en las zonas
+   * de misión. Los drops de enemigos y cajas se suman en runtime.
+   */
   private placeLumas(): void {
     const add = (x: number, y: number, z: number) => this.crystalPositions.push(new THREE.Vector3(x, y, z));
-    // Hub: arcos sobre los 3 caminos
-    add(0, 2, 5); add(0, 2, 2); add(0, 2, -2); add(0, 2, -6);
-    add(-5, 2, -1); add(-9, 2, -1); add(-13, 2, -1.5);
-    add(5, 2, -2); add(9, 2, -2); add(13, 2, -2.5);
-    // Puentes
-    add(-16.5, 2.2, -2); add(16.5, 2.2, -3);
-    // Oeste (anillo alrededor de la arena del Caracoral)
-    add(-22, 1.8, 1); add(-30, 1.8, 1.5); add(-33, 1.8, -5); add(-27, 1.8, -10); add(-20, 1.8, -7);
-    // Este (entre las ruinas)
-    add(22, 2.2, -2); add(27, 2.2, -1); add(31, 2.2, -6); add(25, 2.2, -10); add(21, 2.2, -8);
-    // Subida al faro y espiral
+    // RUTA PRINCIPAL (spawn → faro): la más generosa
+    this.lumaLine(0, 2, 8, 0, 2, -12, 9);
     add(0, 3, -14.8); add(0, 4.2, -17.5);
+    this.lumaRing(0, 2, 0, 10, 12);            // anillo del hub
+    this.lumaLine(-3, 2, -1, -14, 2, -1, 6);   // camino oeste
+    this.lumaLine(3, 2, -2, 14, 2, -2, 6);     // camino este
+    add(-16.5, 2.2, -2); add(16.5, 2.2, -3);   // puentes
+    // FARO: ascenso en espiral + cima
     add(0, 6.2, -21.6); add(3.1, 7.5, -23); add(4.3, 8.8, -26); add(3.1, 10.1, -29);
     add(0, 11.4, -30.4); add(-3.1, 12.7, -29); add(-4.3, 14, -26); add(-3.1, 15.2, -23);
-    // Cima del faro
-    add(1.2, 16.4, -26); add(-1.2, 16.4, -26);
-    // Cerca de la cascada (pista de la Cueva Azul)
-    add(10.5, 1.8, -19); add(10.5, 1.8, -25);
+    this.lumaRing(0, 16.4, -26, 1.6, 6);
+    this.lumaRing(0, 5.2, -24, 6.5, 10);       // alrededor de la base
+    // CUEVA AZUL y su antesala
+    this.lumaLine(51, 8.2, -21, 57, 8.2, -14, 6);
+    this.lumaRing(64.5, 8.4, -18, 2, 6);
+    add(10.5, 1.8, -19); add(10.5, 1.8, -25); add(9.5, 2.4, -27);
+    // ZONAS DE MISIÓN (oeste / este / arboleda / arena)
+    this.lumaRing(-26, 1.8, -4, 7, 12);
+    this.lumaLine(-31, 1.8, -10, -20, 1.8, 2, 6);
+    this.lumaRing(26, 2.2, -6, 7, 12);
+    this.lumaRing(10.5, 2.2, 3.5, 3, 6);
+    this.lumaRing(-11, 2.2, 6, 4.6, 8);
+    // SECRETOS: bordes de playa, vadeos y rincones
+    this.lumaRing(0, 0.8, 0, 15.5, 10);
+    add(-33.5, 1.2, 2.5); add(-34, 1.2, -8); add(33.5, 1.6, -11); add(34, 1.6, 0);
+    add(6, 1.4, 13); add(-6, 1.4, 13); add(0, 1.2, -32.5);
+    // Aldea
+    this.lumaLine(-5, 2, 9, 9, 2, 7, 5);
   }
 
   private placeEnemies(): void {
@@ -755,6 +1004,12 @@ export class LevelManager {
     }
     for (const g of this.glimmers) {
       (g.mesh.material as THREE.MeshBasicMaterial).opacity = 0.35 + (Math.sin(this.time * 1.6 + g.phase) + 1) * 0.2;
+    }
+    // Notas de Luz: flotan y giran esperando ser encontradas
+    for (const note of this.notes) {
+      if (note.collected) continue;
+      note.group.position.y = note.position.y + Math.sin(this.time * 2.4 + note.position.x) * 0.12;
+      note.group.rotation.y += dt * 1.8;
     }
     // Trampolines: latido sutil para que se lean como interactivos
     for (const pad of this.pads) {

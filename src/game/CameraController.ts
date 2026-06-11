@@ -90,6 +90,14 @@ export class CameraController {
     this.currentLook.lerp(desiredLook, 1 - Math.exp(-this.lookLerp * dt));
     this.camera.position.copy(this.currentPos);
     this.camera.lookAt(this.currentLook);
+
+    // FOV dinámico (LDD): 62 quieto → 70 a toda velocidad (sensación de carrera)
+    if (velocity) {
+      const speedT = THREE.MathUtils.clamp(Math.hypot(velocity.x, velocity.z) / 7, 0, 1);
+      const targetFov = 62 + speedT * 8;
+      this.camera.fov += (targetFov - this.camera.fov) * Math.min(3 * dt, 1);
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   resize(aspect: number): void {

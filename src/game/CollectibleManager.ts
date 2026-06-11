@@ -2,54 +2,52 @@ import * as THREE from 'three';
 import { Effects } from './Effects';
 
 interface Luma {
-  mesh: THREE.Mesh;
+  position: THREE.Vector3;
   baseY: number;
   phase: number;
   collected: boolean;
-  /** true cuando el imán del jugador lo está atrayendo. */
   attracted: boolean;
 }
 
 /**
  * CollectibleManager
  * -------------------
- * "Lumas": cristales de energía de Isla Auria. Flotan, rotan, brillan y
- * desaparecen al recogerse con un estallido de partículas. Incluye
- * recolección automática: los Lumas cercanos vuelan hacia el jugador.
+ * "Lumas": la moneda luminosa de Isla Auria. El LDD pide ~250-360 Lumas en
+ * el nivel, así que se renderizan con UN InstancedMesh (una sola draw call)
+ * en lugar de cientos de mallas: flotan, rotan, se atraen al jugador
+ * (imán) y desaparecen al recogerse, sin coste por unidad.
  */
 export class CollectibleManager {
-  private crystals: Luma[] = [];
-  private scene: THREE.Scene;
+  private lumas: Luma[] = [];
+  private instanced: THREE.InstancedMesh;
+  private dummy = new THREE.Object3D();
   private effects: Effects;
-  private geo = new THREE.OctahedronGeometry(0.32);
-  private mat = new THREE.MeshStandardMaterial({
-    color: 0x4de3ff,
-    emissive: 0x18b9e8,
-    emissiveIntensity: 0.9,
-   
-  });
   private time = 0;
 
   /** Lumas recogidos en total (estadística). */
   collected = 0;
-  /** Lumas disponibles para gastar (moneda: santuarios, cofres…). */
+  /** Lumas disponibles para gastar (moneda). */
   balance = 0;
   onCollect: ((collected: number, total: number) => void) | null = null;
 
-  /** Gasta Lumas si hay saldo. Devuelve true si se pudo pagar. */
-  spend(amount: number): boolean {
-    if (this.balance < amount) return false;
-    this.balance -= amount;
-    return true;
-  }
-
-  /** Total fijo del nivel (incluye los Lumas aún escondidos en cajas). */
   private readonly levelTotal: number;
+  private readonly capacity: number;
 
-  constructor(scene: THREE.Scene, effects: Effects, positions: THREE.Vector3[], hiddenInCrates = 0) {
-    this.scene = scene;
+  constructor(scene: THREE.Scene, effects: Effects, positions: THREE.Vector3[], hiddenExtra = 0) {
     this.effects = effects;
-    this.levelTotal = positions.length + hiddenInCrates;
+    this.levelTotal = positions.length + hiddenExtra;
+    // Capacidad con margen para drops de enemigos y cajas
+    this.capacity = positions.length + hiddenExtra + 80;
+
+    const geo = new THREE.OctahedronGeometry(0.3);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x4de3ff, emissive: 0x18b9e8, emissiveIntensity: 1.0, roughness: 0.3,
+    });
+    this.instanced = new THREE.InstancedMesh(geo, mat, this.capacity);
+    this.instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.instanced.frustumCulled = false; // se reparten por todo el nivel
+    scene.add(this.instanced);
+
     for (const pos of positions) this.spawnCrystal(pos);
   }
 
@@ -57,13 +55,17 @@ export class CollectibleManager {
     return this.levelTotal;
   }
 
-  /** Crea un Luma en una posición (también usado por las cajas rotas). */
+  spend(amount: number): boolean {
+    if (this.balance < amount) return false;
+    this.balance -= amount;
+    return true;
+  }
+
+  /** Crea un Luma (colocado, drop de enemigo o de caja). */
   spawnCrystal(position: THREE.Vector3): void {
-    const mesh = new THREE.Mesh(this.geo, this.mat);
-    mesh.position.copy(position);
-    this.scene.add(mesh);
-    this.crystals.push({
-      mesh,
+    if (this.lumas.length >= this.capacity) return;
+    this.lumas.push({
+      position: position.clone(),
       baseY: position.y,
       phase: Math.random() * Math.PI * 2,
       collected: false,
@@ -71,40 +73,49 @@ export class CollectibleManager {
     });
   }
 
-  /** Anima los Lumas, aplica el imán de recogida y detecta la captura. */
-  update(dt: number, playerPosition: THREE.Vector3): boolean {
+  /** Anima todos los Lumas y aplica imán + recogida. Una draw call. */
+  update(dt: number, playerPosition: THREE.Vector3): void {
     this.time += dt;
-    let pickedUp = false;
-    const magnetCenter = playerPosition.clone();
-    magnetCenter.y += 0.8;
-    for (const c of this.crystals) {
-      if (c.collected) continue;
-      const dist = c.mesh.position.distanceTo(magnetCenter);
+    const magnet = playerPosition.clone();
+    magnet.y += 0.8;
+    const rotY = this.time * 1.5;
 
-      // Recolección automática: dentro del radio del imán, el Luma vuela
-      // hacia el jugador (una vez atraído ya no vuelve a su sitio).
-      if (dist < 2.6) c.attracted = true;
-      if (c.attracted) {
-        const pull = Math.min((12 / Math.max(dist, 0.3)) * dt, 1);
-        c.mesh.position.lerp(magnetCenter, pull);
-        c.mesh.rotation.y += dt * 8;
+    for (let i = 0; i < this.lumas.length; i++) {
+      const luma = this.lumas[i];
+      if (luma.collected) {
+        this.dummy.position.set(0, -100, 0);
+        this.dummy.scale.setScalar(0.0001);
       } else {
-        // Flotación y rotación lenta en reposo
-        c.mesh.position.y = c.baseY + Math.sin(this.time * 2 + c.phase) * 0.15;
-        c.mesh.rotation.y += dt * 1.5;
+        const dist = luma.position.distanceTo(magnet);
+        if (dist < 2.6) luma.attracted = true;
+        if (luma.attracted) {
+          const pull = Math.min((12 / Math.max(dist, 0.3)) * dt, 1);
+          luma.position.lerp(magnet, pull);
+        } else {
+          luma.position.y = luma.baseY + Math.sin(this.time * 2 + luma.phase) * 0.15;
+        }
+        if (dist < 0.95) {
+          luma.collected = true;
+          this.collected++;
+          this.balance++;
+          this.effects.burst(luma.position.clone(), 0x4de3ff, 6, 3);
+          this.onCollect?.(this.collected, this.levelTotal);
+        }
+        this.dummy.position.copy(luma.position);
+        this.dummy.rotation.set(0, rotY + luma.phase, 0);
+        this.dummy.scale.setScalar(1);
       }
-
-      // Captura
-      if (dist < 0.9) {
-        c.collected = true;
-        c.mesh.visible = false;
-        this.collected++;
-        this.balance++;
-        this.effects.burst(c.mesh.position, 0x4de3ff, 8, 3);
-        this.onCollect?.(this.collected, this.total);
-        pickedUp = true;
-      }
+      this.dummy.updateMatrix();
+      this.instanced.setMatrixAt(i, this.dummy.matrix);
     }
-    return pickedUp;
+    // Instancias aún no usadas: fuera de vista
+    for (let i = this.lumas.length; i < this.capacity; i++) {
+      this.dummy.position.set(0, -100, 0);
+      this.dummy.scale.setScalar(0.0001);
+      this.dummy.updateMatrix();
+      this.instanced.setMatrixAt(i, this.dummy.matrix);
+    }
+    this.instanced.instanceMatrix.needsUpdate = true;
+    this.instanced.count = this.capacity;
   }
 }
