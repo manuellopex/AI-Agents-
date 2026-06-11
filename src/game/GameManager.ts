@@ -4,6 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { AssetLibrary } from './AssetLibrary';
 import { Atmosphere } from './Atmosphere';
 import { AudioManager } from './AudioManager';
 import { CameraController } from './CameraController';
@@ -51,6 +52,7 @@ export class GameManager {
   private ui: UIManager;
   private audio = new AudioManager();
   private voice = new VoiceSystem();
+  private assets = new AssetLibrary();
 
   // Mundo (se reconstruye al reiniciar)
   private scene!: THREE.Scene;
@@ -108,13 +110,19 @@ export class GameManager {
     this.input = new MobileInputController(container);
     this.ui = new UIManager(container);
     this.wireUi();
+    this.input.setVisible(false);
 
+    // Arranque asíncrono: precargar los modelos GLB (si existen) y construir
+    void this.bootstrap();
+  }
+
+  /** Precarga la librería de assets y levanta el mundo. */
+  private async bootstrap(): Promise<void> {
+    await this.assets.preload(['mael', 'oryn', 'tree', 'rock', 'house']);
     this.buildWorld();
     this.handleResize();
     window.addEventListener('resize', this.handleResize);
-
     this.ui.showStartScreen();
-    this.input.setVisible(false);
     this.loop();
   }
 
@@ -258,7 +266,7 @@ export class GameManager {
     this.scene.add(sun, sun.target);
 
     this.effects = new Effects(this.scene);
-    this.level = new LevelManager(this.scene);
+    this.level = new LevelManager(this.scene, this.assets);
     this.collectibles = new CollectibleManager(
       this.scene, this.effects, this.level.crystalPositions, this.level.crates.length * 2,
     );
@@ -273,6 +281,9 @@ export class GameManager {
       this.level.checkpoints, this.level.killY,
     );
     this.player.pads = this.level.pads;
+    // Modelo final de Mael (public/models/mael.glb): se enchufa solo
+    const maelModel = this.assets.getClone('mael', 1.75);
+    if (maelModel) this.player.useGltfModel(maelModel, this.assets.getAnimations('mael'));
     this.oryn = new CompanionOryn(this.scene);
     this.oryn.setSecret(this.level.orynZoneCenter, this.level.orynZoneRadius, this.level.moundPos);
     this.liora = new Liora(this.scene, [this.level.checkpoints[0]], this.level.faroPedestalPos);

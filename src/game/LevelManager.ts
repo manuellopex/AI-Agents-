@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { applyCloudShadows } from './CloudShadows';
+import type { AssetLibrary } from './AssetLibrary';
 import type { CorruptRock } from './CaracoralBrute';
 import { WaterSurface, IslandShore } from './WaterSurface';
 
@@ -138,7 +139,10 @@ export class LevelManager {
     return mat;
   })();
 
-  constructor(scene: THREE.Scene) {
+  private assets: AssetLibrary | null;
+
+  constructor(scene: THREE.Scene, assets: AssetLibrary | null = null) {
+    this.assets = assets;
     this.buildTerrain();
     this.buildCliffRocks();
     this.buildFloatingIsles();
@@ -788,6 +792,14 @@ export class LevelManager {
   }
 
   private addHouse(x: number, yGround: number, z: number, wallColor: number, rotY = 0): void {
+    const gltfHouse = this.assets?.getClone('house', 2.9);
+    if (gltfHouse) {
+      gltfHouse.position.set(x, yGround + gltfHouse.position.y, z);
+      gltfHouse.rotation.y = rotY;
+      this.group.add(gltfHouse);
+      this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: 1.25 });
+      return;
+    }
     const house = new THREE.Group();
     const wall = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.85 });
     const body = new THREE.Mesh(new RoundedBoxGeometry(1.8, 1.5, 1.6, 2, 0.08), wall);
@@ -847,6 +859,15 @@ export class LevelManager {
   }
 
   private addTree(x: number, yGround: number, z: number, scale = 1): void {
+    // Modelo final si existe public/models/tree.glb (pipeline Paso 2)
+    const gltfTree = this.assets?.getClone('tree', 3.2 * scale);
+    if (gltfTree) {
+      gltfTree.position.set(x, yGround + gltfTree.position.y, z);
+      gltfTree.rotation.y = Math.random() * Math.PI * 2;
+      this.group.add(gltfTree);
+      this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: 0.45 * scale });
+      return;
+    }
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18 * scale, 0.26 * scale, 1.8 * scale, 7), this.matTrunk);
     trunk.position.y = 0.9 * scale;
@@ -865,6 +886,14 @@ export class LevelManager {
   }
 
   private addRock(x: number, yGround: number, z: number, scale = 1): void {
+    const gltfRock = this.assets?.getClone('rock', 1.1 * scale);
+    if (gltfRock) {
+      gltfRock.position.set(x, yGround + gltfRock.position.y, z);
+      gltfRock.rotation.y = Math.random() * Math.PI * 2;
+      this.group.add(gltfRock);
+      this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: 0.55 * scale });
+      return;
+    }
     const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55 * scale, 1), this.matRock);
     rock.position.set(x, yGround + 0.3 * scale, z);
     rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);

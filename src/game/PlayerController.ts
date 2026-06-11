@@ -95,6 +95,11 @@ export class PlayerController {
     this.group.add(this.bodyGroup);
   }
 
+  /** Enchufa el modelo final GLB (lo llama el GameManager si existe). */
+  useGltfModel(model: import('three').Group, clips: import('three').AnimationClip[]): void {
+    this.character.useGltf(model, clips);
+  }
+
   get position(): THREE.Vector3 {
     return this.group.position;
   }

@@ -45,6 +45,12 @@ export class MaelCharacter {
   private runPhase = 0;
   private time = 0;
 
+  // --- Modo modelo final (GLB con esqueleto y animaciones) ---
+  private mixer: THREE.AnimationMixer | null = null;
+  private actions = new Map<string, THREE.AnimationAction>();
+  private currentAction: THREE.AnimationAction | null = null;
+  private proceduralParts: THREE.Object3D[] = [];
+
   // Paleta exacta de los swatches de la hoja
   private skin = new THREE.MeshStandardMaterial({ color: 0xdf9c63, roughness: 0.7 });
   private hair = new THREE.MeshStandardMaterial({ color: 0x271811, roughness: 0.85 });
@@ -64,9 +70,53 @@ export class MaelCharacter {
     this.buildTorso();
     this.buildArms();
     this.buildHead();
+    this.proceduralParts = [...this.root.children];
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
     });
+  }
+
+  /**
+   * Activa el modelo final (GLB de Meshy/Tripo/Blender + animaciones de
+   * Mixamo). El proxy procedural se oculta y la máquina de estados pasa a
+   * controlar el AnimationMixer con crossfades. Si el GLB no trae clips,
+   * se mantiene la animación procedural sobre el modelo nuevo no-articulado.
+   */
+  useGltf(model: THREE.Group, clips: THREE.AnimationClip[]): void {
+    for (const part of this.proceduralParts) part.visible = false;
+    this.root.add(model);
+
+    if (clips.length === 0) return;
+    this.mixer = new THREE.AnimationMixer(model);
+    // Mapear clips por palabras clave del nombre
+    const findClip = (...keys: string[]) =>
+      clips.find((c) => keys.some((k) => c.name.toLowerCase().includes(k)));
+    const mapping: [string, THREE.AnimationClip | undefined][] = [
+      ['idle', findClip('idle', 'stand')],
+      ['run', findClip('run', 'walk', 'sprint')],
+      ['jump', findClip('jump')],
+      ['fall', findClip('fall', 'air')],
+      ['spin', findClip('spin', 'attack', 'slash')],
+      ['punch', findClip('punch', 'hit', 'jab')],
+    ];
+    for (const [state, clip] of mapping) {
+      if (!clip) continue;
+      const action = this.mixer.clipAction(clip);
+      if (state === 'jump' || state === 'punch') {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      this.actions.set(state, action);
+    }
+    this.playAction('idle');
+  }
+
+  private playAction(state: string): void {
+    const next = this.actions.get(state) ?? this.actions.get('idle');
+    if (!next || next === this.currentAction) return;
+    next.reset().fadeIn(0.18).play();
+    this.currentAction?.fadeOut(0.18);
+    this.currentAction = next;
   }
 
   private mesh(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D,
@@ -297,6 +347,23 @@ export class MaelCharacter {
   // ------------------------------------------------------------------
   update(dt: number, pose: MaelPose): void {
     this.time += dt;
+
+    // Modo modelo final: la máquina de estados gobierna el mixer
+    if (this.mixer) {
+      let state = 'idle';
+      if (pose.attacking && pose.attackKind === 'punch') state = 'punch';
+      else if (pose.attacking || pose.pounding) state = 'spin';
+      else if (!pose.grounded) state = pose.velocityY > 1 ? 'jump' : 'fall';
+      else if (pose.speed > 0.6) state = 'run';
+      this.playAction(state);
+      this.mixer.update(dt);
+      // Rebote del cuerpo al correr (también con el modelo final)
+      const runF = THREE.MathUtils.clamp(pose.speed / 7, 0, 1);
+      this.runPhase += dt * (4 + pose.speed * 1.7);
+      this.root.position.y = pose.grounded && runF > 0.05
+        ? Math.abs(Math.sin(this.runPhase)) * 0.04 : 0;
+      return;
+    }
     const lerp = (cur: number, target: number, k: number) =>
       cur + (target - cur) * Math.min(k * dt, 1);
 
