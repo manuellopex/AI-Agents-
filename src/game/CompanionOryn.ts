@@ -19,6 +19,18 @@ export class CompanionOryn {
   /** Posición objetivo relativa al jugador: sobre el hombro izquierdo. */
   private readonly shoulderOffset = new THREE.Vector3(-0.9, 2.2, 0.4);
 
+  // --- Sistema de detección de secretos ---
+  /** Centro y radio de la zona donde Oryn "huele" el secreto. */
+  private secretZone: { center: THREE.Vector3; radius: number; spot: THREE.Vector3 } | null = null;
+  private secretFound = false;
+  private leading = false;
+  private footprintTimer = 0;
+
+  /** Oryn ladra al detectar el secreto (sonido + frase). */
+  onBark: (() => void) | null = null;
+  /** Huella brillante que deja al guiar (la dibuja Effects). */
+  onFootprint: ((position: THREE.Vector3) => void) | null = null;
+
   constructor(scene: THREE.Scene) {
     // Cuerpo: gota redondeada blanco-hielo con barriga crema (perrito marino)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8f4ff, flatShading: true });
@@ -79,12 +91,50 @@ export class CompanionOryn {
     scene.add(this.group);
   }
 
+  /** Configura el secreto enterrado que Oryn puede detectar. */
+  setSecret(zoneCenter: THREE.Vector3, zoneRadius: number, spot: THREE.Vector3): void {
+    this.secretZone = { center: zoneCenter.clone(), radius: zoneRadius, spot: spot.clone() };
+    this.secretFound = false;
+    this.leading = false;
+  }
+
+  /** Marca el secreto como desenterrado: Oryn vuelve a seguir a Mael. */
+  markSecretFound(): void {
+    this.secretFound = true;
+    this.leading = false;
+  }
+
   update(dt: number, playerPosition: THREE.Vector3, playerRotationY: number): void {
     this.time += dt;
-    // Punto objetivo: hombro del jugador, rotado según hacia dónde mira Mael
-    const offset = this.shoulderOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRotationY);
-    const target = playerPosition.clone().add(offset);
-    target.y += Math.sin(this.time * 3) * 0.12; // flotación propia
+
+    // --- Detección de secretos: si Mael entra en la zona, Oryn lo huele ---
+    if (this.secretZone && !this.secretFound) {
+      const inZone = playerPosition.distanceTo(this.secretZone.center) < this.secretZone.radius;
+      if (inZone && !this.leading) {
+        this.leading = true;
+        this.onBark?.();
+      } else if (!inZone && this.leading && playerPosition.distanceTo(this.secretZone.center) > this.secretZone.radius + 5) {
+        this.leading = false; // el jugador se alejó: volver al hombro
+      }
+    }
+
+    // Punto objetivo: el secreto (si está guiando) o el hombro de Mael
+    let target: THREE.Vector3;
+    if (this.leading && this.secretZone && !this.secretFound) {
+      target = this.secretZone.spot.clone().add(new THREE.Vector3(0, 1.4, 0));
+      // Pica-pica sobre el punto exacto, como olfateando
+      target.y += Math.abs(Math.sin(this.time * 6)) * 0.3;
+      // Huellas brillantes entre Mael y el secreto
+      this.footprintTimer -= dt;
+      if (this.footprintTimer <= 0) {
+        this.footprintTimer = 0.5;
+        this.onFootprint?.(this.group.position.clone().setY(this.secretZone.spot.y + 0.15));
+      }
+    } else {
+      const offset = this.shoulderOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRotationY);
+      target = playerPosition.clone().add(offset);
+      target.y += Math.sin(this.time * 3) * 0.12; // flotación propia
+    }
 
     // Movimiento elástico tipo muelle: Oryn "persigue" su sitio con retardo
     const toTarget = target.sub(this.group.position);

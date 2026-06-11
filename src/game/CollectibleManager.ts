@@ -30,8 +30,18 @@ export class CollectibleManager {
   });
   private time = 0;
 
+  /** Lumas recogidos en total (estadística). */
   collected = 0;
+  /** Lumas disponibles para gastar (moneda: santuarios, cofres…). */
+  balance = 0;
   onCollect: ((collected: number, total: number) => void) | null = null;
+
+  /** Gasta Lumas si hay saldo. Devuelve true si se pudo pagar. */
+  spend(amount: number): boolean {
+    if (this.balance < amount) return false;
+    this.balance -= amount;
+    return true;
+  }
 
   /** Total fijo del nivel (incluye los Lumas aún escondidos en cajas). */
   private readonly levelTotal: number;
@@ -89,6 +99,7 @@ export class CollectibleManager {
         c.collected = true;
         c.mesh.visible = false;
         this.collected++;
+        this.balance++;
         this.effects.burst(c.mesh.position, 0x4de3ff, 8, 3);
         this.onCollect?.(this.collected, this.total);
         pickedUp = true;

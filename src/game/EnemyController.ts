@@ -101,8 +101,10 @@ export class EnemyController {
 
   /** Llamado cuando un enemigo toca al jugador. */
   onPlayerHit: ((enemyPosition: THREE.Vector3) => void) | null = null;
-  /** Llamado cuando un enemigo es derrotado. */
-  onEnemyDefeated: (() => void) | null = null;
+  /** Llamado cuando un enemigo es derrotado (con su posición: suelta Lumas). */
+  onEnemyDefeated: ((position: THREE.Vector3) => void) | null = null;
+  /** Llamado cuando el jugador aplasta a un enemigo cayendo encima. */
+  onStomped: (() => void) | null = null;
 
   constructor(scene: THREE.Scene, effects: Effects, defs: EnemyDef[]) {
     this.effects = effects;
@@ -113,15 +115,25 @@ export class EnemyController {
     }
   }
 
-  update(dt: number, playerPosition: THREE.Vector3): void {
+  update(dt: number, playerPosition: THREE.Vector3, playerVelocityY = 0): void {
     for (const enemy of this.enemies) {
       enemy.update(dt);
       if (!enemy.alive) continue;
-      // Contacto con el jugador (comparación en 3D con tolerancia vertical)
       const dx = enemy.position.x - playerPosition.x;
       const dz = enemy.position.z - playerPosition.z;
-      const dy = enemy.position.y - playerPosition.y;
-      if (dx * dx + dz * dz < enemy.touchRadius * enemy.touchRadius && Math.abs(dy) < 1.4) {
+      const dy = playerPosition.y - enemy.position.y;
+      const horizontalSq = dx * dx + dz * dz;
+
+      // Salto sobre el enemigo: si Mael cae encima, lo aplasta y rebota
+      if (playerVelocityY < -3 && dy > 0.4 && dy < 1.6 && horizontalSq < 1.0) {
+        enemy.kill();
+        this.effects.burst(enemy.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xb25bd6, 12, 4);
+        this.onEnemyDefeated?.(enemy.position.clone());
+        this.onStomped?.();
+        continue;
+      }
+      // Contacto lateral: daña al jugador
+      if (horizontalSq < enemy.touchRadius * enemy.touchRadius && Math.abs(dy) < 1.4) {
         this.onPlayerHit?.(enemy.position.clone());
       }
     }
@@ -138,7 +150,7 @@ export class EnemyController {
       if (dx * dx + dz * dz < radius * radius && Math.abs(dy) < 1.6) {
         enemy.kill();
         this.effects.burst(enemy.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xb25bd6, 12, 4);
-        this.onEnemyDefeated?.();
+        this.onEnemyDefeated?.(enemy.position.clone());
         defeated++;
       }
     }

@@ -3,7 +3,7 @@ import type { MobileInputController } from './MobileInputController';
 import type { Obstacle } from './LevelManager';
 
 /** Tipo de ataque ejecutado (informa al GameManager para el feedback). */
-export type AttackKind = 'spin' | 'punch';
+export type AttackKind = 'spin' | 'punch' | 'pound';
 
 /**
  * PlayerController
@@ -30,6 +30,13 @@ export class PlayerController {
   onJump: ((isDouble: boolean) => void) | null = null;
   onAttack: ((center: THREE.Vector3, radius: number, kind: AttackKind) => void) | null = null;
   onFellOffMap: (() => void) | null = null;
+  /** Rebote en trampolín. */
+  onBouncePad: (() => void) | null = null;
+
+  /** Trampolines del nivel (los inyecta el GameManager). */
+  pads: { position: THREE.Vector3; power: number }[] = [];
+  /** true mientras cae en ground pound (golpea al aterrizar). */
+  pounding = false;
 
   // --- Parámetros de movimiento (ajustables) ---
   private readonly walkSpeed = 3.5;
@@ -235,6 +242,23 @@ export class PlayerController {
         this.velocity.y = 0;
         this.grounded = true;
         this.canDoubleJump = false;
+        // Impacto del ground pound: golpe de área al tocar suelo
+        if (this.pounding) {
+          this.pounding = false;
+          this.onAttack?.(this.group.position.clone(), 2.6, 'pound');
+        }
+        // Trampolines: lanzan hacia arriba al pisarlos
+        for (const pad of this.pads) {
+          const dx = this.group.position.x - pad.position.x;
+          const dz = this.group.position.z - pad.position.z;
+          if (dx * dx + dz * dz < 1.1 && Math.abs(this.group.position.y - pad.position.y) < 0.8) {
+            this.velocity.y = pad.power;
+            this.grounded = false;
+            this.canDoubleJump = true;
+            this.onBouncePad?.();
+            break;
+          }
+        }
       } else if (this.grounded === false && feet < groundY - this.maxStepHeight && this.velocity.y <= 0 && prevY < groundY) {
         // Estamos contra la pared lateral de una plataforma más alta:
         // deshacer movimiento horizontal para no atravesarla.
@@ -265,6 +289,13 @@ export class PlayerController {
   private updateAttack(dt: number): void {
     this.attackCooldown = Math.max(this.attackCooldown - dt, 0);
     if (this.input.consumeAttack() && this.attackCooldown <= 0 && !this.attacking) {
+      // Ground pound: ataque en el aire = caída en picado con golpe de área
+      if (!this.grounded && !this.pounding) {
+        this.pounding = true;
+        this.velocity.set(this.velocity.x * 0.2, -26, this.velocity.z * 0.2);
+        this.attackCooldown = 0.6;
+        return;
+      }
       const speed = Math.hypot(this.velocity.x, this.velocity.z);
       this.attacking = true;
       this.attackCooldown = 1.0; // cooldown breve

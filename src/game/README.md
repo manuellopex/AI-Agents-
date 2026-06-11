@@ -68,14 +68,35 @@ Abre **http://localhost:3000/game**.
 | GIRO | sobre el salto | quieto/lento: ataque giratorio · corriendo: golpe hacia adelante |
 | ⏸ | arriba-derecha | pausa |
 
+## Diseño del nivel (mini mundo abierto)
+
+Costa Brillante ya no es un pasillo: es un hub con **3 caminos visibles**
+y el **Faro del Alba** dominando el horizonte. El objetivo es reunir
+**3 Destellos de Auralis (de 6)** — cada uno con un reto distinto — y
+activar el faro:
+
+| Destello | Reto | Estado |
+|---|---|---|
+| Del Faro | Ruta vertical de plataformas en espiral | ✔ jugable |
+| Del Coral Dormido | Usar las embestidas del **Caracoral Brute** para romper 3 rocas corruptas y purificar la playa | ✔ jugable |
+| De Oryn | Seguir el olfato de Oryn (ladrido + huellas brillantes) hasta una reliquia enterrada y excavarla con un ataque | ✔ jugable |
+| De los Quiríes | Mini-misión de las 5 notas de luz | teaser (próx.) |
+| De la Cueva Azul | Puzzle tras la cascada sellada | teaser (próx.) |
+| Del Desafío de Mael | Ruta cronometrada del santuario | teaser (próx.) |
+
 ## Reglas del juego
 
+- **Los Lumas son moneda**, no el objetivo: caen de enemigos y cajas, y
+  el santuario rosa de la aldea cura toda la vida por 10 Lumas.
 - 3 corazones; invulnerabilidad breve con parpadeo tras cada golpe.
 - Caer al agua resta un corazón y te devuelve al último checkpoint.
-- Sin corazones → pantalla de derrota y reinicio del nivel.
-- Los Lumas cercanos se recogen automáticamente (imán).
-- Las cajas se rompen con cualquier ataque y sueltan 2 Lumas.
-- Tocar el tótem final → pantalla de victoria con tu cuenta de Lumas.
+- **Salta sobre un Grub** para aplastarlo y rebotar; **ataca en el aire**
+  para hacer ground pound de área; los **trampolines teal** te lanzan a
+  los atajos.
+- El Caracoral es invulnerable: atácalo o ponte en línea con una roca
+  corrupta para que su embestida la rompa.
+- Con 3 Destellos, vuelve al pedestal del faro → secuencia de activación
+  y pantalla de progreso del nivel.
 
 ## Estructura del código (`src/game/`)
 

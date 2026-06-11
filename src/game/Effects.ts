@@ -51,6 +51,17 @@ export class Effects {
     this.particles.push({ mesh, velocity: new THREE.Vector3(), life: 0.35, maxLife: 0.35 });
   }
 
+  /** Huella brillante de Oryn: disco que respira y se desvanece. */
+  footprint(position: THREE.Vector3): void {
+    const geo = new THREE.CircleGeometry(0.22, 12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.8 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.copy(position);
+    this.scene.add(mesh);
+    this.particles.push({ mesh, velocity: new THREE.Vector3(), life: 2.5, maxLife: 2.5 });
+  }
+
   update(dt: number): void {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];

@@ -58,6 +58,16 @@ export class AudioManager {
   playVictory(): void { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, 0.35, 'triangle', 0.25), i * 140)); }
   /** Canto breve de un Quirí: dos notas dulces y agudas, ambiente isleño. */
   playQuiri(): void { this.tone(1680, 0.14, 'sine', 0.07, 2050); setTimeout(() => this.tone(2050, 0.18, 'sine', 0.06, 1680), 160); }
+  /** Ladrido de Oryn: dos yips cortos. */
+  playBark(): void { this.tone(740, 0.09, 'square', 0.2, 520); setTimeout(() => this.tone(820, 0.1, 'square', 0.18, 560), 130); }
+  /** Fanfarria de Destello conseguido. */
+  playDestello(): void { [660, 880, 1100, 1320, 1760].forEach((f, i) => setTimeout(() => this.tone(f, 0.3, 'triangle', 0.22), i * 110)); }
+  playCharge(): void { this.tone(110, 0.5, 'sawtooth', 0.22, 70); }
+  playRockBreak(): void { this.tone(90, 0.35, 'square', 0.25, 40); this.tone(160, 0.2, 'sawtooth', 0.15, 60); }
+  playPound(): void { this.tone(70, 0.3, 'square', 0.3, 35); }
+  playBoing(): void { this.tone(220, 0.3, 'sine', 0.22, 660); }
+  playPurify(): void { [880, 1100, 1320].forEach((f, i) => setTimeout(() => this.tone(f, 0.4, 'sine', 0.15), i * 150)); }
+  playDig(): void { this.tone(200, 0.15, 'square', 0.18, 120); setTimeout(() => this.tone(160, 0.15, 'square', 0.16, 100), 120); }
   playDefeat(): void { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => this.tone(f, 0.4, 'triangle', 0.22), i * 180)); }
 
   /** Música de fondo placeholder: arpegio pentatónico relajado, vibra tropical. */
