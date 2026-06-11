@@ -42,7 +42,7 @@ export class MobileInputController {
     // --- Joystick virtual ---
     this.stickBase = document.createElement('div');
     this.stickBase.style.cssText =
-      'position:absolute;left:24px;bottom:36px;width:130px;height:130px;border-radius:50%;' +
+      'position:absolute;left:24px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:118px;height:118px;border-radius:50%;' +
       'background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);' +
       'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,20,40,.25);pointer-events:auto;';
     this.stickKnob = document.createElement('div');
@@ -52,9 +52,14 @@ export class MobileInputController {
     this.stickBase.appendChild(this.stickKnob);
     this.root.appendChild(this.stickBase);
 
-    // --- Botones de acción: cristal translúcido con icono (estilo maqueta) ---
-    const jumpBtn = this.makeButton('⬆', 'right:22px;bottom:120px;width:80px;height:80px;font-size:34px;');
-    const attackBtn = this.makeButton('🗡', 'right:34px;bottom:36px;width:64px;height:64px;font-size:26px;');
+    // --- Botones de acción (guía UI): salto = el más grande, teal Auralis;
+    //     giro/acción = coral, algo menor. Respetan el safe area inferior. ---
+    const jumpBtn = this.makeButton('⬆',
+      'right:22px;bottom:calc(112px + env(safe-area-inset-bottom, 0px));width:86px;height:86px;font-size:36px;' +
+      'background:rgba(30,203,205,.42);border-color:rgba(30,203,205,.8);');
+    const attackBtn = this.makeButton('🗡',
+      'right:34px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;font-size:26px;' +
+      'background:rgba(238,120,88,.45);border-color:rgba(238,120,88,.8);');
     jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.jumpQueued = true; this.pressFx(jumpBtn); });
     attackBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.attackQueued = true; this.pressFx(attackBtn); });
     this.root.appendChild(jumpBtn);

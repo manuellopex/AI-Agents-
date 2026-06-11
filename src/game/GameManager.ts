@@ -54,6 +54,7 @@ export class GameManager {
   private faroDone = false;
   private storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
   private triggerCooldowns = new Map<string, number>();
+  private secretsFound = new Set<string>();
   private introTimers: ReturnType<typeof setTimeout>[] = [];
   private quiriTimer = 5;
 
@@ -99,7 +100,8 @@ export class GameManager {
       if (this.state !== 'playing') return;
       this.state = 'paused';
       this.audio.stopMusic();
-      this.ui.showPauseScreen();
+      this.ui.showPauseScreen(this.destelloRows(), this.collectibles.balance,
+        this.player.position.x, this.player.position.z);
     };
     this.ui.onResume = () => this.startPlaying();
     this.ui.onContinue = () => this.startPlaying();
@@ -187,10 +189,12 @@ export class GameManager {
     this.health.reset();
     this.storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
     this.triggerCooldowns.clear();
+    this.secretsFound.clear();
     this.ui.setHealth(this.health.health);
     this.ui.setLumas(0);
-    this.ui.setDestellos(0, this.destellos.total);
-    this.ui.setObjective(`Explora los 3 caminos y reúne <b>${this.destellos.required} Destellos de Auralis</b>`);
+    this.ui.setDestellos(0, this.destellos.required);
+    this.ui.setNoxiaNearby(false);
+    this.ui.setObjective(`Reúne <b>${this.destellos.required} Destellos de Auralis</b>`);
 
     this.wireGameplay();
   }
@@ -237,7 +241,7 @@ export class GameManager {
     };
 
     this.player.onFellOffMap = () => {
-      this.health.takeDamage();
+      if (this.health.takeDamage()) this.ui.setHealth(this.health.health, true);
       if (this.health.health > 0) {
         this.player.respawn();
         this.cameraCtrl.snapTo(this.player.position);
@@ -273,6 +277,8 @@ export class GameManager {
         // Zona purificada → Destello del Coral Dormido
         this.level.purifyWestZone();
         this.audio.playPurify();
+        this.ui.setNoxiaNearby(false);
+        this.ui.showBanner('🌺 Zona purificada', 'purified');
         this.destellos.spawnVisual('coral', this.level.coralDestelloPos);
         this.ui.say('Elaria', 'La playa respira de nuevo. La Noxia retrocede.');
       }
@@ -281,7 +287,7 @@ export class GameManager {
     // --- Oryn: detección de secretos ---
     this.oryn.onBark = () => {
       this.audio.playBark();
-      this.ui.say('Oryn', '¡Guau! Espera… ¿acabo de ladrar? ¡Huelo algo enterrado por aquí!');
+      this.ui.showOrynToast(); // toast pequeño, no pausa el juego (guía §12)
     };
     this.oryn.onFootprint = (pos) => this.effects.footprint(pos);
 
@@ -298,13 +304,13 @@ export class GameManager {
     // --- Destellos de Auralis (el objetivo) ---
     this.destellos.onCollect = (def, count) => {
       this.audio.playDestello();
-      this.ui.setDestellos(count, this.destellos.total);
-      this.ui.showBanner(`✦ ¡${def.nombre}!`);
+      this.ui.setDestellos(count, this.destellos.required, this.faroDone ? this.destellos.total : undefined);
+      this.ui.showBanner(`⭐ ¡${def.nombre}!`);
       if (count >= this.destellos.required && !this.faroDone) {
-        this.ui.setObjective('¡Ya tienes 3 Destellos! <b>Vuelve al Faro del Alba</b> y actívalo');
+        this.ui.setObjective('<b>Activa el Faro del Alba</b>');
         this.ui.say('Elaria', 'Suficiente luz reunida… el faro espera tu regreso.');
       } else if (!this.faroDone) {
-        this.ui.setObjective(`Reúne <b>${this.destellos.required - count} Destello(s)</b> más y vuelve al faro`);
+        this.ui.setObjective(`Reúne <b>${this.destellos.required - count} Destello(s)</b> más`);
       }
     };
 
@@ -323,6 +329,7 @@ export class GameManager {
     if (this.health.takeDamage()) {
       this.player.applyHit(from);
       this.audio.playHurt();
+      this.ui.setHealth(this.health.health, true); // flash coral + tembleque
       this.ui.say('Oryn', orynLine);
     }
   }
@@ -346,6 +353,12 @@ export class GameManager {
       if (t > 0) this.triggerCooldowns.set(id, t - dt);
     }
     const p = this.player.position;
+
+    // Vignette violeta: Noxia activa en la playa oeste sin purificar
+    const noxiaActive = this.level.corruptRocks.some((r) => !r.broken);
+    const inWest = p.x < this.level.westBounds.maxX + 3 && p.x > this.level.westBounds.minX - 3 &&
+      p.z > this.level.westBounds.minZ - 3 && p.z < this.level.westBounds.maxZ + 3;
+    this.ui.setNoxiaNearby(noxiaActive && inWest);
 
     // Pedestal del Faro del Alba
     if (!this.faroDone && p.distanceTo(this.level.faroPedestalPos) < 2.4) {
@@ -375,12 +388,15 @@ export class GameManager {
           }
           break;
         case 'quiries':
+          this.secretsFound.add('quiries');
           this.ui.say('Quirí', '♪ Perdimos nuestras 5 notas de luz… vuelve pronto, viajero ♪', 4200);
           break;
         case 'desafio':
+          this.secretsFound.add('desafio');
           this.ui.say('Elaria', 'El santuario del desafío aún duerme. Su reto despertará pronto.');
           break;
         case 'cueva':
+          this.secretsFound.add('cueva');
           this.ui.say('Oryn', '¡Una puerta tras la cascada! Sellada… La Cueva Azul guarda algo.');
           break;
       }
@@ -413,14 +429,39 @@ export class GameManager {
       this.state = 'faro';
       this.input.setVisible(false);
       this.audio.stopMusic();
-      const rows = this.destellos.defs.map((d) => ({
-        nombre: d.nombre,
-        estado: this.destellos.isComplete(d.id)
-          ? ('completado' as const)
-          : d.disponible ? ('pendiente' as const) : ('bloqueado' as const),
-      }));
-      this.ui.showFaroScreen(rows, this.collectibles.balance);
+      this.ui.setDestellos(this.destellos.count, this.destellos.required, this.destellos.total);
+      this.ui.showFaroScreen(
+        this.destelloRows(), this.collectibles.balance,
+        this.secretsFound.size, this.completionPercent(),
+      );
     }, 6800));
+  }
+
+  /** Filas de Destellos para pausa/mapa/pantalla final. */
+  private destelloRows() {
+    const mapPos: Record<string, [number, number]> = {
+      faro: [0, -26], coral: [-26, -4], oryn: [30, -10],
+      quiries: [11.5, 4], cueva: [10.5, -22], desafio: [-11, 6],
+    };
+    return this.destellos.defs.map((d) => ({
+      nombre: d.nombre,
+      tipo: d.tipo,
+      estado: this.destellos.isComplete(d.id)
+        ? ('completado' as const)
+        : d.disponible ? ('pendiente' as const) : ('bloqueado' as const),
+      x: mapPos[d.id][0],
+      z: mapPos[d.id][1],
+    }));
+  }
+
+  /** % de Costa Brillante: Destellos 60 · Lumas 25 · secretos 15. */
+  private completionPercent(): number {
+    const lumaFrac = Math.min(this.collectibles.collected / Math.max(this.collectibles.total, 1), 1);
+    return Math.round(
+      (this.destellos.count / this.destellos.total) * 60 +
+      lumaFrac * 25 +
+      (this.secretsFound.size / 3) * 15,
+    );
   }
 
   // ------------------------------------------------------------------
