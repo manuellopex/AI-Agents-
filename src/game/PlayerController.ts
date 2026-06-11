@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MaelCharacter } from './MaelCharacter';
 import type { MobileInputController } from './MobileInputController';
 import type { Obstacle } from './LevelManager';
 
@@ -63,7 +64,8 @@ export class PlayerController {
 
   private raycaster = new THREE.Raycaster();
   private readonly down = new THREE.Vector3(0, -1, 0);
-  private bodyGroup = new THREE.Group();
+  private character = new MaelCharacter();
+  private bodyGroup = this.character.root;
   private runTime = 0;
 
   constructor(
@@ -86,44 +88,8 @@ export class PlayerController {
     scene.add(this.group);
   }
 
-  /** Mael: personaje original low-poly (traje teal, pelo castaño oscuro, bufanda dorada). */
+  /** Monta el modelo de Mael (ver MaelCharacter.ts, fiel a la hoja de personaje). */
   private buildCharacter(): void {
-    const skin = new THREE.MeshStandardMaterial({ color: 0xf0b98a });
-    const suit = new THREE.MeshStandardMaterial({ color: 0x2aa6a0 });
-    const hair = new THREE.MeshStandardMaterial({ color: 0x4a3326 });
-    const scarf = new THREE.MeshStandardMaterial({ color: 0xf2c14e });
-
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.5, 8, 20), suit);
-    body.position.y = 0.7;
-    body.castShadow = true;
-    this.bodyGroup.add(body);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 18), skin);
-    head.position.y = 1.45;
-    head.castShadow = true;
-    this.bodyGroup.add(head);
-
-    // Cresta de pelo hacia atrás
-    const crest = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), hair);
-    crest.position.set(0, 1.68, -0.12);
-    crest.rotation.x = -0.7;
-    this.bodyGroup.add(crest);
-
-    // Ojos
-    const eyeGeo = new THREE.SphereGeometry(0.055, 6, 6);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1b2a33 });
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(eyeGeo, eyeMat);
-      eye.position.set(0.12 * side, 1.48, 0.28);
-      this.bodyGroup.add(eye);
-    }
-
-    // Bufanda (da lectura de dirección al girar)
-    const scarfMesh = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.09, 6, 10), scarf);
-    scarfMesh.position.y = 1.18;
-    scarfMesh.rotation.x = Math.PI / 2;
-    this.bodyGroup.add(scarfMesh);
-
     this.group.add(this.bodyGroup);
   }
 
@@ -350,15 +316,14 @@ export class PlayerController {
       this.bodyGroup.visible = Math.floor(this.blinkTimer * 10) % 2 === 0;
       if (this.blinkTimer <= 0) this.bodyGroup.visible = true;
     }
-    // Pequeño rebote al correr (estilo arcade)
-    const speed = Math.hypot(this.velocity.x, this.velocity.z);
-    if (this.grounded && speed > 0.5) {
-      this.bodyGroup.position.y = Math.abs(Math.sin(this.runTime * 2.5)) * 0.08;
-    } else {
-      this.bodyGroup.position.y = 0;
-    }
-    // Estirar ligeramente el cuerpo en el aire
-    const stretch = this.grounded ? 1 : 1 + Math.min(Math.abs(this.velocity.y) * 0.012, 0.15);
-    this.bodyGroup.scale.y = stretch;
+    // Animación procedural por extremidades (carrera, salto, ataques…)
+    this.character.update(dt, {
+      speed: Math.hypot(this.velocity.x, this.velocity.z),
+      grounded: this.grounded,
+      velocityY: this.velocity.y,
+      attacking: this.attacking,
+      attackKind: this.currentAttack,
+      pounding: this.pounding,
+    });
   }
 }
