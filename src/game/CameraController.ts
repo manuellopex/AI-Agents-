@@ -3,63 +3,89 @@ import * as THREE from 'three';
 /**
  * CameraController
  * -----------------
- * Cámara en tercera persona pensada para pantalla vertical 9:16, con
- * encuadre cinematográfico tipo aventura:
- *  - Baja y cercana al personaje (se ve grande, en el tercio inferior)
- *  - El punto de mira está adelantado y elevado: se ve el horizonte y la
- *    ciudad-acantilado del fondo, no solo el suelo
- *  - Look-ahead lateral: se adelanta suavemente hacia donde corres
- *  - Suavizado exponencial independiente del framerate (sin tirones)
+ * Cámara de seguimiento en tercera persona para vertical 9:16:
+ *  - Gira suavemente para colocarse DETRÁS de Mael según hacia dónde
+ *    corre: los enemigos y el camino siempre quedan delante, en pantalla.
+ *  - Elevada y con distancia para leer plataformas y patrullas.
+ *  - Look-ahead hacia el movimiento y suavizado independiente del framerate.
+ *
+ * El yaw actual se expone para que el joystick sea relativo a cámara.
  */
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
 
-  /** Offset de la cámara respecto al jugador (elevada y con distancia
-   *  suficiente para leer mapa, enemigos y saltos). */
-  private readonly offset = new THREE.Vector3(0, 7.2, 9.2);
-  /** El lookAt apunta por delante: el personaje queda en el tercio
-   *  inferior y se ve mucho terreno de juego. */
-  private readonly lookAhead = new THREE.Vector3(0, 1.4, -7.5);
-  private readonly followLerp = 4.5;  // suavizado de posición
-  private readonly lookLerp = 5.5;    // suavizado del punto de mira
-  /** Cuánto se adelanta la mirada hacia el movimiento lateral. */
-  private readonly lateralLead = 0.55;
+  /** Ángulo horizontal actual de la cámara (0 = mirando hacia -Z). */
+  yaw = 0;
+
+  /** Altura y distancia respecto al jugador. */
+  private readonly height = 7.4;
+  private readonly distance = 9.0;
+  /** El punto de mira: adelantado y bajo, jugador en el tercio inferior. */
+  private readonly lookAheadDist = 7.5;
+  private readonly lookAheadY = 1.4;
+  private readonly followLerp = 4.5;
+  private readonly lookLerp = 5.5;
+  /** Velocidad de giro del yaw hacia la espalda del jugador. */
+  private readonly yawLerp = 1.7;
+  private readonly lateralLead = 0.5;
 
   private currentPos = new THREE.Vector3();
   private currentLook = new THREE.Vector3();
   private initialized = false;
 
   constructor(aspect: number) {
-    // FOV generoso para formato vertical: aire arriba, suelo legible abajo
     this.camera = new THREE.PerspectiveCamera(62, aspect, 0.1, 250);
   }
 
-  /** Coloca la cámara instantáneamente (al iniciar o tras un respawn). */
+  /** Coloca la cámara instantáneamente (inicio o respawn). */
   snapTo(target: THREE.Vector3): void {
-    this.currentPos.copy(target).add(this.offset);
-    this.currentLook.copy(target).add(this.lookAhead);
+    this.currentPos.copy(target).add(this.offsetVector());
+    this.currentLook.copy(target).add(this.lookVector());
     this.camera.position.copy(this.currentPos);
     this.camera.lookAt(this.currentLook);
     this.initialized = true;
   }
 
-  /**
-   * @param velocity velocidad del jugador: desplaza la mirada hacia donde
-   *                 corre para que siempre haya espacio por delante.
-   */
+  private offsetVector(): THREE.Vector3 {
+    return new THREE.Vector3(Math.sin(this.yaw) * this.distance, this.height, Math.cos(this.yaw) * this.distance);
+  }
+
+  private lookVector(): THREE.Vector3 {
+    return new THREE.Vector3(
+      -Math.sin(this.yaw) * this.lookAheadDist, this.lookAheadY, -Math.cos(this.yaw) * this.lookAheadDist,
+    );
+  }
+
   update(dt: number, target: THREE.Vector3, velocity?: THREE.Vector3): void {
     if (!this.initialized) {
       this.snapTo(target);
       return;
     }
-    const desiredPos = target.clone().add(this.offset);
-    const desiredLook = target.clone().add(this.lookAhead);
+
+    // Girar el yaw para quedar detrás de la dirección de carrera
     if (velocity) {
-      // Look-ahead: la cámara "mira" un poco hacia donde te mueves
-      desiredLook.x += THREE.MathUtils.clamp(velocity.x * this.lateralLead, -2.2, 2.2);
-      desiredLook.z += THREE.MathUtils.clamp(velocity.z * 0.25, -1.5, 1.5);
+      const speed = Math.hypot(velocity.x, velocity.z);
+      if (speed > 1.6) {
+        const desiredYaw = Math.atan2(velocity.x, velocity.z) + Math.PI;
+        let delta = desiredYaw - this.yaw;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        // Gira más rápido cuanto más corre (y nunca de golpe)
+        this.yaw += delta * Math.min(this.yawLerp * (0.4 + (speed / 7) * 0.6) * dt, 1);
+      }
     }
-    // Lerp exponencial independiente del framerate
+
+    const desiredPos = target.clone().add(this.offsetVector());
+    const desiredLook = target.clone().add(this.lookVector());
+    if (velocity) {
+      // Look-ahead en ejes de cámara: derecha y profundidad
+      const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+      const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+      const vRight = velocity.x * right.x + velocity.z * right.z;
+      const vFwd = velocity.x * fwd.x + velocity.z * fwd.z;
+      desiredLook.addScaledVector(right, THREE.MathUtils.clamp(vRight * this.lateralLead, -2.2, 2.2));
+      desiredLook.addScaledVector(fwd, THREE.MathUtils.clamp(vFwd * 0.22, -1.5, 1.5));
+    }
+
     this.currentPos.lerp(desiredPos, 1 - Math.exp(-this.followLerp * dt));
     this.currentLook.lerp(desiredLook, 1 - Math.exp(-this.lookLerp * dt));
     this.camera.position.copy(this.currentPos);

@@ -36,6 +36,8 @@ export class PlayerController {
 
   /** Trampolines del nivel (los inyecta el GameManager). */
   pads: { position: THREE.Vector3; power: number }[] = [];
+  /** Yaw de la cámara: el joystick se interpreta relativo a ella. */
+  cameraYaw = 0;
   /** true mientras cae en ground pound (golpea al aterrizar). */
   pounding = false;
 
@@ -144,8 +146,13 @@ export class PlayerController {
   }
 
   private updateMovement(dt: number): void {
-    const ix = this.input.moveX;
-    const iz = this.input.moveZ;
+    // Entrada relativa a cámara: "arriba" siempre es alejarse de la cámara
+    const cos = Math.cos(this.cameraYaw);
+    const sin = Math.sin(this.cameraYaw);
+    const rawX = this.input.moveX;
+    const rawZ = this.input.moveZ;
+    const ix = rawX * cos + rawZ * sin;
+    const iz = -rawX * sin + rawZ * cos;
     const magnitude = Math.min(Math.hypot(ix, iz), 1);
     // Joystick a fondo = correr; inclinación suave = caminar
     const speed = magnitude > 0.7 ? this.runSpeed : this.walkSpeed;

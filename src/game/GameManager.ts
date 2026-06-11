@@ -59,6 +59,11 @@ export class GameManager {
   private effects!: Effects;
   private health = new HealthSystem();
 
+  // Calidad adaptativa: si el dispositivo no llega a ~40 fps sostenidos,
+  // baja la resolución interna y apaga el bloom automáticamente.
+  private lowFpsTime = 0;
+  private qualityLowered = false;
+
   // Estado de aventura
   private faroDone = false;
   private storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
@@ -74,7 +79,7 @@ export class GameManager {
     container.style.touchAction = 'none';
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -173,12 +178,12 @@ export class GameManager {
     const sun = new THREE.DirectionalLight(0xffdf9e, 1.25);
     sun.position.set(18, 35, -10);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -50;
-    sun.shadow.camera.right = 50;
-    sun.shadow.camera.top = 50;
-    sun.shadow.camera.bottom = -50;
-    sun.shadow.camera.far = 120;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -38;
+    sun.shadow.camera.right = 38;
+    sun.shadow.camera.top = 42;
+    sun.shadow.camera.bottom = -42;
+    sun.shadow.camera.far = 110;
     sun.target.position.set(0, 0, -10);
     this.scene.add(sun, sun.target);
 
@@ -507,6 +512,7 @@ export class GameManager {
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
     if (this.state === 'playing') {
+      this.player.cameraYaw = this.cameraCtrl.yaw;
       this.player.update(dt);
       this.health.update(dt);
       this.enemies.update(dt, this.player.position, this.player.velocity.y);
@@ -528,8 +534,23 @@ export class GameManager {
     this.level.update(dt);
     this.effects.update(dt);
 
+    this.updateAdaptiveQuality(dt);
     this.composer.render();
   };
+
+  /** Baja la calidad una vez si el framerate sostenido es bajo. */
+  private updateAdaptiveQuality(dt: number): void {
+    if (this.qualityLowered) return;
+    // dt llega recortado a 0.05: usamos eso como señal de frame lento (>25ms)
+    if (dt > 0.025) this.lowFpsTime += dt;
+    else this.lowFpsTime = Math.max(this.lowFpsTime - dt * 0.5, 0);
+    if (this.lowFpsTime > 2.5) {
+      this.qualityLowered = true;
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.15));
+      this.bloomPass.enabled = false;
+      this.handleResize();
+    }
+  }
 
   /** Reacciones contextuales al explorar. */
   private storyMoments(): void {
