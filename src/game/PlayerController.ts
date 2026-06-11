@@ -95,6 +95,14 @@ export class PlayerController {
     this.group.add(this.bodyGroup);
   }
 
+  /** Mantiene la animación de idle (cutscenes): respira en vez de congelarse. */
+  updateIdleVisuals(dt: number): void {
+    this.character.update(dt, {
+      speed: 0, grounded: true, velocityY: 0,
+      attacking: false, attackKind: 'spin', pounding: false,
+    });
+  }
+
   /** Enchufa el modelo final GLB (lo llama el GameManager si existe). */
   useGltfModel(model: import('three').Group, clips: import('three').AnimationClip[]): void {
     this.character.useGltf(model, clips);

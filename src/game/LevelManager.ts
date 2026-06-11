@@ -161,6 +161,7 @@ export class LevelManager {
     this.buildPads();
     this.buildGlimmers();
     this.placeLumas();
+    this.snapLumasToGround();
     this.placeEnemies();
     scene.add(this.group);
   }
@@ -249,23 +250,34 @@ export class LevelManager {
     const rocks = new THREE.InstancedMesh(geo, mat, total);
     rocks.frustumCulled = false;
     const dummy = new THREE.Object3D();
+    const raycaster = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
     let i = 0;
-    for (const [cx, cz, rx, rz, yTop, count, scale] of rings) {
+    for (const [cx, cz, rx, rz, , count, scale] of rings) {
       for (let k = 0; k < count; k++) {
         const a = (k / count) * Math.PI * 2 + Math.sin(k * 7.3) * 0.15;
-        // Sobre la pendiente, justo bajo el borde de la meseta (e ≈ 0.83)
         const e = 0.83 + Math.random() * 0.06;
-        dummy.position.set(cx + Math.cos(a) * rx * e, yTop - 0.7 - Math.random() * 0.6, cz + Math.sin(a) * rz * e);
+        const x = cx + Math.cos(a) * rx * e;
+        const z = cz + Math.sin(a) * rz * e;
+        // Anclaje al terreno REAL: raycast contra las mallas esculpidas
+        raycaster.set(new THREE.Vector3(x, 40, z), down);
+        raycaster.far = 60;
+        const hit = raycaster.intersectObjects(this.groundMeshes, false)[0];
+        if (!hit || hit.point.y < -0.5) continue;
+        const sy = scale * (0.5 + Math.random() * 0.5);
+        // Media roca enterrada en la ladera
+        dummy.position.set(x, hit.point.y + sy * 0.15, z);
         dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * 0.5);
         dummy.scale.set(
           scale * (0.7 + Math.random() * 0.8),
-          scale * (0.5 + Math.random() * 0.5),
+          sy,
           scale * (0.7 + Math.random() * 0.6),
         );
         dummy.updateMatrix();
         rocks.setMatrixAt(i++, dummy.matrix);
       }
     }
+    rocks.count = i;
     this.group.add(rocks);
   }
 
@@ -1089,6 +1101,25 @@ export class LevelManager {
     this.lumaRing(0, 0.8, -8, 47, 14);
     add(-46, 1.4, 12); add(46, 1.4, -16); add(0, 1.2, -56); add(24, 1.3, 22); add(-24, 1.3, 22);
     add(-24, 5.6, -10); add(-24, 5.6, -18);
+  }
+
+  /**
+   * Ajusta los Lumas al terreno real: si un Luma quedó hundido o flotando
+   * cerca del suelo (pendientes, plataformas), se recoloca a 1 m sobre la
+   * superficie. Los que están claramente en el aire (arcos de salto,
+   * espiral, orillas sobre el mar) se respetan.
+   */
+  private snapLumasToGround(): void {
+    const raycaster = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+    for (const pos of this.crystalPositions) {
+      raycaster.set(new THREE.Vector3(pos.x, pos.y + 12, pos.z), down);
+      raycaster.far = 40;
+      const hit = raycaster.intersectObjects(this.groundMeshes, false)[0];
+      if (!hit) continue;
+      const ideal = hit.point.y + 1.0;
+      if (Math.abs(pos.y - ideal) < 2.2) pos.y = ideal;
+    }
   }
 
   private placeEnemies(): void {

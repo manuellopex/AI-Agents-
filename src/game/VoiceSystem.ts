@@ -81,7 +81,10 @@ export class VoiceSystem {
       .trim();
     if (!clean) return;
 
-    window.speechSynthesis.cancel();
+    // No cortar la frase en curso: se encola la nueva (máximo 1 pendiente,
+    // si ya había una esperando se descarta la más vieja)
+    const synth = window.speechSynthesis;
+    if (synth.pending) synth.cancel();
     const utterance = new SpeechSynthesisUtterance(clean);
     if (this.voice) utterance.voice = this.voice;
     utterance.lang = this.voice?.lang ?? 'es-ES';

@@ -315,6 +315,10 @@ export class GameManager {
     // El Destello del Faro espera en la cima desde el principio (visible al subir)
     this.destellos.spawnVisual('faro', this.level.faroDestelloPos);
 
+    // Precompilar TODOS los shaders ahora: sin tirones en el primer frame
+    // de la cutscene (la compilación en caliente era lo que la cortaba)
+    this.renderer.compile(this.scene, this.cameraCtrl.camera);
+
     this.faroDone = false;
     this.playerInCave = false;
     this.notesCollected = 0;
@@ -790,6 +794,7 @@ export class GameManager {
 
     if (this.state === 'cutscene') {
       this.cutscene.update(dt);
+      this.player.updateIdleVisuals(dt);
       this.oryn.update(dt, this.player.position, this.player.facingY);
       this.liora.update(dt, this.player.position, this.destellos.count / this.destellos.required);
       this.elaria.update(dt);
@@ -837,6 +842,8 @@ export class GameManager {
   /** Baja la calidad una vez si el framerate sostenido es bajo. */
   private updateAdaptiveQuality(dt: number): void {
     if (this.qualityLowered) return;
+    // Solo medir durante gameplay: los tirones de carga/cutscene no cuentan
+    if (this.state !== 'playing') return;
     // dt llega recortado a 0.05: usamos eso como señal de frame lento (>25ms)
     if (dt > 0.025) this.lowFpsTime += dt;
     else this.lowFpsTime = Math.max(this.lowFpsTime - dt * 0.5, 0);
