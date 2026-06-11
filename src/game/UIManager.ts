@@ -64,9 +64,15 @@ export class UIManager {
   private dialogueTimeout: ReturnType<typeof setTimeout> | null = null;
   private damageOverlay!: HTMLDivElement;
   private noxiaOverlay!: HTMLDivElement;
+  private barTop!: HTMLDivElement;
+  private barBottom!: HTMLDivElement;
+  private skipBtn!: HTMLDivElement;
+  private hudGroup: HTMLElement[] = [];
   private overlay: HTMLDivElement | null = null;
 
   onPause: (() => void) | null = null;
+  /** Saltar la cutscene en curso. */
+  onSkipCutscene: (() => void) | null = null;
   onResume: (() => void) | null = null;
   onRestart: (() => void) | null = null;
   onStart: (() => void) | null = null;
@@ -103,6 +109,7 @@ export class UIManager {
       this.hearts.push(heart);
     }
     this.root.appendChild(this.heartsBox);
+    this.hudGroup.push(this.heartsBox);
 
     // Destellos: progreso principal (dorado, prominente) — "2/3" como la guía
     this.destelloCounter = document.createElement('div');
@@ -111,6 +118,7 @@ export class UIManager {
       `border-color:rgba(246,192,74,.65);padding:5px 14px;border-radius:18px;`;
     this.destelloCounter.textContent = '⭐ 0/3';
     this.root.appendChild(this.destelloCounter);
+    this.hudGroup.push(this.destelloCounter);
 
     // Lumas: moneda secundaria (no compite con los Destellos)
     this.lumaCounter = document.createElement('div');
@@ -119,6 +127,7 @@ export class UIManager {
       'padding:4px 12px;border-radius:16px;';
     this.lumaCounter.textContent = '🔹 0';
     this.root.appendChild(this.lumaCounter);
+    this.hudGroup.push(this.lumaCounter);
 
     // Objetivo activo: región + verbo claro (arriba-derecha)
     this.questCard = document.createElement('div');
@@ -126,6 +135,7 @@ export class UIManager {
       `position:absolute;top:64px;right:14px;max-width:48%;color:${COLOR.cream};font-size:12px;line-height:1.5;${GLASS}` +
       'padding:8px 12px;border-radius:12px;text-align:left;';
     this.root.appendChild(this.questCard);
+    this.hudGroup.push(this.questCard);
     this.setObjective('Reúne <b>3 Destellos de Auralis</b>');
 
     // Toast contextual de Oryn (desaparece rápido, no pausa el juego)
@@ -152,13 +162,14 @@ export class UIManager {
       `justify-content:center;font-size:20px;color:${COLOR.cream};${GLASS}pointer-events:auto;`;
     pauseBtn.addEventListener('pointerdown', () => this.onPause?.());
     this.root.appendChild(pauseBtn);
+    this.hudGroup.push(pauseBtn);
 
     // Caja de diálogo: panel crema/pergamino (cálido, narrativo)
     this.dialogue = document.createElement('div');
     this.dialogue.style.cssText =
       `position:absolute;top:150px;left:50%;transform:translateX(-50%);max-width:78%;color:#1b3a44;background:${COLOR.cream};` +
       'padding:10px 16px;border-radius:16px;border:2px solid #7de8c3;font-size:14px;font-weight:600;text-align:center;' +
-      'opacity:0;transition:opacity .3s;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+      'opacity:0;transition:opacity .3s;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:7;';
     this.root.appendChild(this.dialogue);
 
     // Flash coral de daño en los bordes de la pantalla
@@ -167,6 +178,23 @@ export class UIManager {
       `position:absolute;inset:0;pointer-events:none;opacity:0;` +
       `box-shadow:inset 0 0 70px 24px ${COLOR.coral};`;
     this.root.appendChild(this.damageOverlay);
+
+    // Barras de cine + botón Saltar (modo cutscene)
+    this.barTop = document.createElement('div');
+    this.barTop.style.cssText =
+      'position:absolute;top:0;left:0;right:0;height:0;background:#04141c;transition:height .5s ease;z-index:5;';
+    this.root.appendChild(this.barTop);
+    this.barBottom = document.createElement('div');
+    this.barBottom.style.cssText =
+      'position:absolute;bottom:0;left:0;right:0;height:0;background:#04141c;transition:height .5s ease;z-index:5;';
+    this.root.appendChild(this.barBottom);
+    this.skipBtn = document.createElement('div');
+    this.skipBtn.textContent = 'Saltar ▸';
+    this.skipBtn.style.cssText =
+      `position:absolute;bottom:18px;right:16px;color:${COLOR.cream};font:700 13px system-ui;${GLASS}` +
+      'padding:8px 16px;border-radius:14px;pointer-events:auto;display:none;z-index:6;';
+    this.skipBtn.addEventListener('pointerdown', () => this.onSkipCutscene?.());
+    this.root.appendChild(this.skipBtn);
 
     // Vignette violeta sutil: Noxia cerca
     this.noxiaOverlay = document.createElement('div');
@@ -207,6 +235,17 @@ export class UIManager {
   setObjective(html: string): void {
     this.questCard.innerHTML =
       `<b style="color:${COLOR.gold};">✦ Costa Brillante</b><br>${html}`;
+  }
+
+  /** Modo cinemático: barras de cine, HUD oculto y botón Saltar. */
+  setCinematic(active: boolean): void {
+    this.barTop.style.height = active ? '9%' : '0';
+    this.barBottom.style.height = active ? '9%' : '0';
+    this.skipBtn.style.display = active ? 'block' : 'none';
+    for (const el of this.hudGroup) {
+      el.style.opacity = active ? '0' : '1';
+      el.style.pointerEvents = active ? 'none' : '';
+    }
   }
 
   /** Vignette de peligro Noxia (activo cerca de zonas corruptas). */

@@ -28,6 +28,12 @@ export class CompanionOryn {
 
   /** Oryn ladra al detectar el secreto (sonido + frase). */
   onBark: (() => void) | null = null;
+  /** Celebración: saltitos y giros (secuencia del faro). */
+  private celebrateTimer = 0;
+
+  celebrate(seconds: number): void {
+    this.celebrateTimer = seconds;
+  }
   /** Huella brillante que deja al guiar (la dibuja Effects). */
   onFootprint: ((position: THREE.Vector3) => void) | null = null;
 
@@ -151,5 +157,11 @@ export class CompanionOryn {
     this.wings[1].rotation.y = -0.4 - flap;
     // Inclinación cómica al moverse rápido
     this.group.rotation.z = THREE.MathUtils.clamp(-this.velocity.x * 0.06, -0.4, 0.4);
+    // Celebración: brincos amplios y vueltas de alegría
+    if (this.celebrateTimer > 0) {
+      this.celebrateTimer -= dt;
+      this.group.position.y += Math.abs(Math.sin(this.time * 9)) * 0.5;
+      this.group.rotation.y += dt * 7;
+    }
   }
 }

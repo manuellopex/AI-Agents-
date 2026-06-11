@@ -9,6 +9,8 @@ import { CameraController } from './CameraController';
 import { CaracoralBrute } from './CaracoralBrute';
 import { CollectibleManager } from './CollectibleManager';
 import { CompanionOryn } from './CompanionOryn';
+import { CutsceneSystem } from './CutsceneSystem';
+import { ElariaApparition } from './ElariaApparition';
 import { DestelloSystem } from './DestelloSystem';
 import { Effects } from './Effects';
 import { EnemyController } from './EnemyController';
@@ -20,7 +22,7 @@ import { PlayerController } from './PlayerController';
 import { SkyDome } from './SkyDome';
 import { UIManager } from './UIManager';
 
-type GameState = 'ready' | 'playing' | 'paused' | 'faro' | 'defeat';
+type GameState = 'ready' | 'playing' | 'paused' | 'cutscene' | 'faro' | 'defeat';
 
 /**
  * GameManager
@@ -58,6 +60,10 @@ export class GameManager {
   private destellos!: DestelloSystem;
   private effects!: Effects;
   private health = new HealthSystem();
+  private cutscene!: CutsceneSystem;
+  private elaria!: ElariaApparition;
+  /** Estado al que volver cuando termina la cutscene. */
+  private postCutsceneState: GameState = 'playing';
 
   // Calidad adaptativa: si el dispositivo no llega a ~40 fps sostenidos,
   // baja la resolución interna y apaga el bloom automáticamente.
@@ -112,8 +118,8 @@ export class GameManager {
   private wireUi(): void {
     this.ui.onStart = () => {
       this.audio.init();
-      this.startPlaying();
-      this.playIntro();
+      this.ui.hideOverlay();
+      this.playIntroCutscene();
     };
     this.ui.onPause = () => {
       if (this.state !== 'playing') return;
@@ -123,6 +129,7 @@ export class GameManager {
         this.player.position.x, this.player.position.z);
     };
     this.ui.onResume = () => this.startPlaying();
+    this.ui.onSkipCutscene = () => this.cutscene?.skip();
     this.ui.onContinue = () => this.startPlaying();
     this.ui.onRestart = () => {
       this.clearIntro();
@@ -138,17 +145,61 @@ export class GameManager {
     this.state = 'playing';
   }
 
-  /** Apertura del capítulo: presenta el objetivo, no un tutorial. */
-  private playIntro(): void {
-    this.clearIntro();
-    const script: [number, Parameters<UIManager['say']>[0], string][] = [
-      [200, 'Oryn', 'Mael… el Faro del Alba está apagado. Eso no puede ser bueno.'],
-      [4000, 'Elaria', 'Reúne 3 Destellos de Auralis y devuelve la luz al faro.'],
-      [8000, 'Oryn', 'Veo tres caminos… y huelo secretos. ¡Tú elige por dónde!'],
-    ];
-    for (const [delay, speaker, text] of script) {
-      this.introTimers.push(setTimeout(() => this.ui.say(speaker, text), delay));
-    }
+  /** Cutscene de apertura: del faro apagado al hub, presentando el objetivo. */
+  private playIntroCutscene(): void {
+    this.startCutscene([
+      {
+        // Plano 1: el Faro del Alba, apagado, contra el cielo
+        duration: 4.5,
+        camFrom: new THREE.Vector3(26, 30, -76),
+        camTo: new THREE.Vector3(16, 22, -64),
+        lookTo: new THREE.Vector3(0, 14, -44),
+        dialogue: { speaker: 'Oryn', text: 'Mael… el Faro del Alba está apagado. Eso no puede ser bueno.' },
+      },
+      {
+        // Plano 2: barrido sobre la isla, de las terrazas al sur
+        duration: 5,
+        camTo: new THREE.Vector3(-26, 16, 4),
+        lookTo: new THREE.Vector3(0, 4, -16),
+        dialogue: { speaker: 'Elaria', text: 'Reúne 3 Destellos de Auralis y devuelve la luz al faro.' },
+      },
+      {
+        // Plano 3: descenso hasta la espalda de Mael en el spawn
+        duration: 3.5,
+        camTo: this.player.position.clone().add(new THREE.Vector3(0, 7.2, 9.2)),
+        lookTo: this.player.position.clone().add(new THREE.Vector3(0, 1.4, -7.5)),
+        dialogue: { speaker: 'Oryn', text: 'Veo tres caminos… y huelo secretos. ¡Tú elige por dónde!' },
+        onStart: () => {
+          this.effects.burst(this.player.position.clone().add(new THREE.Vector3(0, 2, 0)), 0xffd34d, 10, 3);
+          this.oryn.celebrate(2);
+        },
+      },
+    ], 'playing');
+  }
+
+  /** Arranca una cutscene: congela el gameplay y cede la cámara. */
+  private startCutscene(shots: Parameters<CutsceneSystem['play']>[0], after: GameState): void {
+    this.postCutsceneState = after;
+    this.state = 'cutscene';
+    this.input.setVisible(false);
+    this.ui.setCinematic(true);
+    this.audio.startMusic();
+    this.cutscene.play(shots, () => {
+      this.ui.setCinematic(false);
+      this.cameraCtrl.snapTo(this.player.position);
+      if (this.postCutsceneState === 'playing') {
+        this.startPlaying();
+      } else if (this.postCutsceneState === 'faro') {
+        this.state = 'faro';
+        this.audio.stopMusic();
+        this.ui.showFaroScreen(
+          this.destelloRows(), this.collectibles.balance,
+          this.secretsFound.size, this.completionPercent(),
+        );
+      } else {
+        this.state = this.postCutsceneState;
+      }
+    });
   }
 
   private clearIntro(): void {
@@ -213,6 +264,8 @@ export class GameManager {
     this.liora = new Liora(this.scene, [this.level.checkpoints[0]], this.level.faroPedestalPos);
     this.cameraCtrl = new CameraController(this.container.clientWidth / Math.max(this.container.clientHeight, 1));
     this.cameraCtrl.snapTo(this.player.position);
+    this.cutscene = new CutsceneSystem(this.cameraCtrl.camera, (sp, tx, dur) => this.ui.say(sp, tx, dur));
+    this.elaria = new ElariaApparition(this.scene);
 
     // Post-procesado: render + bloom (la magia brilla de verdad) + salida
     this.composer = new EffectComposer(this.renderer);
@@ -310,7 +363,13 @@ export class GameManager {
         this.ui.setNoxiaNearby(false);
         this.ui.showBanner('🌺 Zona purificada', 'purified');
         this.destellos.spawnVisual('coral', this.level.coralDestelloPos);
-        this.ui.say('Elaria', 'La playa respira de nuevo. La Noxia retrocede.');
+        // Plano de foco: la playa purificada y su Destello
+        this.startCutscene([{
+          duration: 3.2,
+          camTo: this.level.coralDestelloPos.clone().add(new THREE.Vector3(6, 5, 8)),
+          lookTo: this.level.coralDestelloPos.clone(),
+          dialogue: { speaker: 'Elaria', text: 'La playa respira de nuevo. La Noxia retrocede.' },
+        }], 'playing');
       }
     };
 
@@ -399,8 +458,14 @@ export class GameManager {
     this.audio.playDig();
     this.effects.burst(this.level.moundPos.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xc9a96e, 14, 4);
     this.oryn.markSecretFound();
-    this.ui.say('Oryn', '¡Lo sabía! Mi olfato nuevo sí sirve para algo.');
     setTimeout(() => this.destellos.spawnVisual('oryn', this.level.orynDestelloPos), 900);
+    // Plano de foco: la reliquia emergiendo de la arena
+    this.startCutscene([{
+      duration: 3,
+      camTo: this.level.moundPos.clone().add(new THREE.Vector3(4, 3.5, 5)),
+      lookTo: this.level.moundPos.clone().add(new THREE.Vector3(0, 0.8, 0)),
+      dialogue: { speaker: 'Oryn', text: '¡Lo sabía! Mi olfato nuevo sí sirve para algo.' },
+    }], 'playing');
   }
 
   // ------------------------------------------------------------------
@@ -487,65 +552,68 @@ export class GameManager {
     return true;
   }
 
-  /** Secuencia de activación del Faro del Alba. */
+  /** Secuencia de activación del Faro del Alba (cutscene, LDD §6). */
   private activateFaro(): void {
     this.faroDone = true;
-    this.level.activateFaro();
-    this.audio.playVictory();
-    this.ui.setObjective('✔ Faro del Alba activado — explora lo que quede o sigue al siguiente capítulo');
+    this.ui.setObjective('✔ Faro del Alba activado');
+    this.ui.setDestellos(this.destellos.count, this.destellos.required, this.destellos.total);
+    const crystalPos = new THREE.Vector3(0, 21.5, -44);
+    const pedestal = this.level.faroPedestalPos;
 
-    // Pequeña secuencia: reacciones + luz + pantalla de progreso
-    const crystalPos = new THREE.Vector3(0, 16.6, -26);
-    this.effects.burst(crystalPos, 0xffd34d, 24, 7);
-    this.effects.ring(this.level.faroPedestalPos.clone(), 0xffd34d, 4);
-    this.ui.say('Oryn', '¡SÍ! ¡Luz! ¡Somos héroes oficiales de la isla!', 3000);
-    this.introTimers.push(setTimeout(() => {
-      this.ui.say('Elaria', 'La luz no estaba perdida. Solo esperaba que alguien la reuniera.', 3600);
-      this.effects.burst(crystalPos, 0xffe9a0, 18, 6);
-    }, 3000));
-    // Paso 5 del LDD: la luz purifica la isla (flores brotan en el hub)
-    this.introTimers.push(setTimeout(() => {
-      this.level.purifyIsland();
-      this.audio.playPurify();
-      this.ui.showBanner('🌺 La isla respira de nuevo', 'purified');
-    }, 5200));
-    this.introTimers.push(setTimeout(() => {
-      this.state = 'faro';
-      this.input.setVisible(false);
-      this.audio.stopMusic();
-      this.ui.setDestellos(this.destellos.count, this.destellos.required, this.destellos.total);
-      this.ui.showFaroScreen(
-        this.destelloRows(), this.collectibles.balance,
-        this.secretsFound.size, this.completionPercent(),
-      );
-    }, 6800));
-  }
+    this.startCutscene([
+      {
+        // Paso 1-2: colocar los Destellos + reacción de Oryn
+        duration: 4,
+        camFrom: pedestal.clone().add(new THREE.Vector3(5, 3, 6)),
+        camTo: pedestal.clone().add(new THREE.Vector3(3, 2.2, 4)),
+        lookTo: pedestal.clone().add(new THREE.Vector3(0, 0.8, 0)),
+        dialogue: { speaker: 'Oryn', text: '¡Los Destellos! ¡Colócalos, colócalos!' },
+        onStart: () => {
+          this.effects.ring(pedestal.clone(), 0xffd34d, 3);
+          this.effects.burst(pedestal.clone().add(new THREE.Vector3(0, 1, 0)), 0xffd34d, 14, 4);
+          this.oryn.celebrate(4);
+          this.audio.playDestello();
+        },
+      },
+      {
+        // Paso 3: aparición de Elaria
+        duration: 4.5,
+        camTo: pedestal.clone().add(new THREE.Vector3(-4, 2.5, 5)),
+        lookTo: pedestal.clone().add(new THREE.Vector3(2, 1.5, -1)),
+        dialogue: { speaker: 'Elaria', text: 'La luz no estaba perdida. Solo esperaba que alguien la reuniera.' },
+        onStart: () => {
+          this.elaria.appearAt(pedestal.clone().add(new THREE.Vector3(2.5, 0.4, -2)), this.player.position);
+          this.audio.playPurify();
+        },
+      },
+      {
+        // Paso 4: el rayo del faro se abre hacia el cielo
+        duration: 5,
+        camTo: new THREE.Vector3(12, 26, -60),
+        lookTo: crystalPos,
+        dialogue: { speaker: 'Liora', text: '✦' },
+        onStart: () => {
+          this.level.activateFaro();
+          this.audio.playVictory();
+          this.effects.burst(crystalPos, 0xffd34d, 26, 8);
+          this.effects.burst(crystalPos, 0xffe9a0, 18, 5);
+        },
+      },
+      {
+        // Pasos 5-6: la luz purifica la isla y abre la siguiente ruta
+        duration: 5.5,
+        camTo: new THREE.Vector3(0, 38, 14),
+        lookTo: new THREE.Vector3(0, 6, -18),
+        dialogue: { speaker: 'Oryn', text: '¡SÍ! ¡Luz! ¡Somos héroes oficiales de la isla!' },
+        onStart: () => {
+          this.level.purifyIsland();
+          this.audio.playPurify();
+          this.ui.showBanner('🌺 La isla respira de nuevo', 'purified');
+          this.elaria.fadeOut();
+        },
+      },
+    ], 'faro');
 
-  /** Filas de Destellos para pausa/mapa/pantalla final. */
-  private destelloRows() {
-    const mapPos: Record<string, [number, number]> = {
-      faro: [0, -44], coral: [-36, 4], oryn: [38, -6],
-      quiries: [16, 8], cueva: [-28, -14], desafio: [20, -34],
-    };
-    return this.destellos.defs.map((d) => ({
-      nombre: d.nombre,
-      tipo: d.tipo,
-      estado: this.destellos.isComplete(d.id)
-        ? ('completado' as const)
-        : d.disponible ? ('pendiente' as const) : ('bloqueado' as const),
-      x: mapPos[d.id][0],
-      z: mapPos[d.id][1],
-    }));
-  }
-
-  /** % de Costa Brillante: Destellos 60 · Lumas 25 · secretos 15. */
-  private completionPercent(): number {
-    const lumaFrac = Math.min(this.collectibles.collected / Math.max(this.collectibles.total, 1), 1);
-    return Math.round(
-      (this.destellos.count / this.destellos.total) * 60 +
-      lumaFrac * 25 +
-      (this.secretsFound.size / 3) * 15,
-    );
   }
 
   /** Cueva Azul: placas de presión → puente cristalino → cofre → salida. */
@@ -553,7 +621,6 @@ export class GameManager {
     if (!this.playerInCave) return;
     const p = this.player.position;
 
-    // Placas de presión
     for (const plate of this.level.cavePlates) {
       if (plate.pressed) continue;
       if (p.distanceTo(plate.pos) < 1.0 && this.player.grounded) {
@@ -571,13 +638,11 @@ export class GameManager {
       }
     }
 
-    // Cofre del Destello (se abre con un ataque cerca)
     if (this.level.caveBridgeOpen && !this.level.caveChestOpened && this.player.attacking) {
       if (p.distanceTo(this.level.caveChestPos) < 2.2) {
         this.level.openCaveChest();
         this.audio.playBreak();
         this.effects.burst(this.level.caveChestPos.clone(), 0xffd34d, 16, 5);
-        // Lumas del cofre + el Eco del Santuario
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           this.collectibles.spawnCrystal(this.level.caveChestPos.clone()
@@ -587,7 +652,6 @@ export class GameManager {
       }
     }
 
-    // Portal de salida
     if (p.distanceTo(this.level.caveExitPos) < 1.6) {
       this.triggerCooldowns.set('cueva', 6);
       this.playerInCave = false;
@@ -627,8 +691,8 @@ export class GameManager {
       const x = c.x + Math.cos(a) * 3.6;
       const z = c.z + Math.sin(a) * 3.2;
       this.enemies.spawn({
-        pointA: new THREE.Vector3(x, 1, z),
-        pointB: new THREE.Vector3(c.x + Math.cos(a + 1.5) * 2.2, 1, c.z + Math.sin(a + 1.5) * 2),
+        pointA: new THREE.Vector3(x, c.y, z),
+        pointB: new THREE.Vector3(c.x + Math.cos(a + 1.5) * 2.2, c.y, c.z + Math.sin(a + 1.5) * 2),
       });
     }
     this.level.setArenaWave(this.arenaWave + 1);
@@ -640,7 +704,6 @@ export class GameManager {
     if (this.arenaWave < 0 || this.arenaWave >= 3) return;
     if (this.enemies.aliveCount > this.arenaBaseline) return;
     this.arenaBaseline = Math.min(this.arenaBaseline, this.enemies.aliveCount);
-    // Oleada superada
     this.arenaWave++;
     if (this.arenaWave < 3) {
       this.spawnArenaWave();
@@ -648,13 +711,39 @@ export class GameManager {
       this.audio.playPurify();
       this.ui.say('Elaria', 'Tres oleadas. El santuario reconoce tu valor.');
       this.destellos.spawnVisual('desafio', this.level.arenaDestelloPos);
-      // Lumas raros de recompensa
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         this.collectibles.spawnCrystal(this.level.arenaCenter.clone()
           .add(new THREE.Vector3(Math.cos(a) * 2, 1.2, Math.sin(a) * 2)));
       }
     }
+  }
+
+  /** Filas de Destellos para pausa/mapa/pantalla final. */
+  private destelloRows() {
+    const mapPos: Record<string, [number, number]> = {
+      faro: [0, -44], coral: [-36, 4], oryn: [38, -6],
+      quiries: [16, 8], cueva: [-28, -14], desafio: [20, -34],
+    };
+    return this.destellos.defs.map((d) => ({
+      nombre: d.nombre,
+      tipo: d.tipo,
+      estado: this.destellos.isComplete(d.id)
+        ? ('completado' as const)
+        : d.disponible ? ('pendiente' as const) : ('bloqueado' as const),
+      x: mapPos[d.id][0],
+      z: mapPos[d.id][1],
+    }));
+  }
+
+  /** % de Costa Brillante: Destellos 60 · Lumas 25 · secretos 15. */
+  private completionPercent(): number {
+    const lumaFrac = Math.min(this.collectibles.collected / Math.max(this.collectibles.total, 1), 1);
+    return Math.round(
+      (this.destellos.count / this.destellos.total) * 60 +
+      lumaFrac * 25 +
+      (this.secretsFound.size / 3) * 15,
+    );
   }
 
   // ------------------------------------------------------------------
@@ -665,6 +754,12 @@ export class GameManager {
     this.rafId = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
+    if (this.state === 'cutscene') {
+      this.cutscene.update(dt);
+      this.oryn.update(dt, this.player.position, this.player.facingY);
+      this.liora.update(dt, this.player.position, this.destellos.count / this.destellos.required);
+      this.elaria.update(dt);
+    }
     if (this.state === 'playing') {
       this.player.cameraYaw = this.cameraCtrl.yaw;
       this.player.update(dt);
@@ -682,6 +777,7 @@ export class GameManager {
       this.oryn.update(dt, this.player.position, this.player.facingY);
       this.liora.update(dt, this.player.position, this.destellos.count / this.destellos.required);
       this.cameraCtrl.update(dt, this.player.position, this.player.velocity);
+      this.elaria.update(dt);
       this.updateInteractions(dt);
       this.updateCave();
       this.updateNotes();
