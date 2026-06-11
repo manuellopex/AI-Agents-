@@ -23,7 +23,7 @@ Auria es una isla viva, cálida, colorida, mágica y aventurera. Combina:
 
 | Principio | Aplicación |
 |---|---|
-| Low-poly estilizado | primitivas con `flatShading`, siluetas simples |
+| Estilizado suave | geometría redondeada con sombreado suave, IBL y bloom |
 | Colores vibrantes | saturación alta, sombras suaves, sin grises fríos |
 | Legibilidad móvil | formas grandes, contraste fuerte, nada de ruido visual |
 | Personajes expresivos | ojos grandes, posturas dinámicas, animación con personalidad |

@@ -28,8 +28,8 @@ class Grub {
     this.pointB = def.pointB.clone();
 
     // Cuerpo: esfera achatada low-poly
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xb25bd6, flatShading: true });
-    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), bodyMat);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xb25bd6 });
+    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 2), bodyMat);
     body.scale.set(1, 0.8, 1);
     body.position.y = 0.45;
     body.castShadow = true;
@@ -52,7 +52,7 @@ class Grub {
     // Pequeños "brotes" en la cabeza
     const sprout = new THREE.Mesh(
       new THREE.ConeGeometry(0.1, 0.35, 5),
-      new THREE.MeshStandardMaterial({ color: 0x3fae6a, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x3fae6a }),
     );
     sprout.position.y = 0.95;
     this.group.add(sprout);

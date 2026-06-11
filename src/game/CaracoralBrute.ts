@@ -58,19 +58,19 @@ export class CaracoralBrute {
 
   /** Caracol grande: cuerpo arenoso, caparazón en espiral corrupto, ojos en tallos. */
   private buildBody(): void {
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd8b878, flatShading: true });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd8b878 });
     const shellMat = new THREE.MeshStandardMaterial({
-      color: 0x5a3a78, emissive: 0x2a1048, emissiveIntensity: 0.5, flatShading: true,
+      color: 0x5a3a78, emissive: 0x2a1048, emissiveIntensity: 0.5,
     });
 
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.0, 4, 8), bodyMat);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.0, 8, 18), bodyMat);
     body.rotation.x = Math.PI / 2;
     body.position.set(0, 0.55, 0.2);
     body.castShadow = true;
     this.group.add(body);
 
     // Caparazón en espiral: esferas decrecientes
-    this.shell = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), shellMat);
+    this.shell = new THREE.Mesh(new THREE.SphereGeometry(0.85, 20, 16), shellMat);
     this.shell.position.set(0, 1.15, -0.35);
     this.shell.castShadow = true;
     this.group.add(this.shell);
@@ -83,7 +83,7 @@ export class CaracoralBrute {
 
     // Cristales de Noxia incrustados en el caparazón
     const noxiaMat = new THREE.MeshStandardMaterial({
-      color: 0xb25bd6, emissive: 0x7a2fd0, emissiveIntensity: 0.9, flatShading: true,
+      color: 0xb25bd6, emissive: 0x7a2fd0, emissiveIntensity: 0.9,
     });
     for (const [x, y, z] of [[0.5, 1.4, -0.3], [-0.5, 1.3, -0.45], [0.15, 1.9, -0.6]] as const) {
       const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.16), noxiaMat);

@@ -81,7 +81,7 @@ export class DestelloSystem {
     const core = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.55),
       new THREE.MeshStandardMaterial({
-        color: 0xffe9a0, emissive: 0xffb820, emissiveIntensity: 1.1, flatShading: true,
+        color: 0xffe9a0, emissive: 0xffb820, emissiveIntensity: 1.1,
       }),
     );
     group.add(core);

@@ -88,17 +88,17 @@ export class PlayerController {
 
   /** Mael: personaje original low-poly (traje teal, pelo castaño oscuro, bufanda dorada). */
   private buildCharacter(): void {
-    const skin = new THREE.MeshStandardMaterial({ color: 0xf0b98a, flatShading: true });
-    const suit = new THREE.MeshStandardMaterial({ color: 0x2aa6a0, flatShading: true });
-    const hair = new THREE.MeshStandardMaterial({ color: 0x4a3326, flatShading: true });
-    const scarf = new THREE.MeshStandardMaterial({ color: 0xf2c14e, flatShading: true });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xf0b98a });
+    const suit = new THREE.MeshStandardMaterial({ color: 0x2aa6a0 });
+    const hair = new THREE.MeshStandardMaterial({ color: 0x4a3326 });
+    const scarf = new THREE.MeshStandardMaterial({ color: 0xf2c14e });
 
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.5, 4, 8), suit);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.5, 8, 20), suit);
     body.position.y = 0.7;
     body.castShadow = true;
     this.bodyGroup.add(body);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), skin);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 18), skin);
     head.position.y = 1.45;
     head.castShadow = true;
     this.bodyGroup.add(head);

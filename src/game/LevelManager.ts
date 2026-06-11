@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { CorruptRock } from './CaracoralBrute';
+import { WaterSurface, IslandShore } from './WaterSurface';
 
 /** Obstáculo cilíndrico simple (árboles, rocas, cajas) para colisión lateral. */
 export interface Obstacle {
@@ -64,7 +66,7 @@ export class LevelManager {
   readonly checkpoints: THREE.Vector3[] = [];
   readonly pads: BouncePad[] = [];
   readonly triggers: Trigger[] = [];
-  readonly killY = -2;
+  readonly killY = -0.45;
 
   // --- Faro del Alba ---
   readonly faroPedestalPos = new THREE.Vector3(0, 4, -19.5);
@@ -88,25 +90,24 @@ export class LevelManager {
   private relic!: THREE.Group;
   private relicRise = -1;
 
-  private water!: THREE.Mesh;
   private time = 0;
   private quiries: { mesh: THREE.Group; phase: number }[] = [];
   private glimmers: { mesh: THREE.Mesh; phase: number }[] = [];
 
   // Materiales compartidos — paleta caribeña de Isla Auria
-  private matGrass = new THREE.MeshStandardMaterial({ color: 0x58b368, flatShading: true });
-  private matSand = new THREE.MeshStandardMaterial({ color: 0xeed3a0, flatShading: true });
-  private matWood = new THREE.MeshStandardMaterial({ color: 0xb07a5a, flatShading: true });
-  private matRock = new THREE.MeshStandardMaterial({ color: 0xb3ab98, flatShading: true });
-  private matTrunk = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
-  private matLeaf = new THREE.MeshStandardMaterial({ color: 0x2fa05e, flatShading: true });
-  private matCrate = new THREE.MeshStandardMaterial({ color: 0xc96f4a, flatShading: true });
-  private matStone = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, flatShading: true });
+  private matGrass = new THREE.MeshStandardMaterial({ color: 0x58b368 });
+  private matSand = new THREE.MeshStandardMaterial({ color: 0xeed3a0 });
+  private matWood = new THREE.MeshStandardMaterial({ color: 0xb07a5a });
+  private matRock = new THREE.MeshStandardMaterial({ color: 0xb3ab98 });
+  private matTrunk = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+  private matLeaf = new THREE.MeshStandardMaterial({ color: 0x2fa05e });
+  private matCrate = new THREE.MeshStandardMaterial({ color: 0xc96f4a });
+  private matStone = new THREE.MeshStandardMaterial({ color: 0xe8dcc0 });
   private matNoxia = new THREE.MeshStandardMaterial({
-    color: 0x5a3a78, emissive: 0x3a1060, emissiveIntensity: 0.6, flatShading: true,
+    color: 0x5a3a78, emissive: 0x3a1060, emissiveIntensity: 0.6,
   });
   private matGoldGlow = new THREE.MeshStandardMaterial({
-    color: 0xffd34d, emissive: 0xffaa00, emissiveIntensity: 0.8, flatShading: true,
+    color: 0xffd34d, emissive: 0xffaa00, emissiveIntensity: 0.8,
   });
 
   constructor(scene: THREE.Scene) {
@@ -130,8 +131,65 @@ export class LevelManager {
   // Construcción de zonas
   // ------------------------------------------------------------------
 
+  /** Costas registradas para la espuma del agua. */
+  private shores: IslandShore[] = [];
+  private water2!: WaterSurface;
+
+  /**
+   * Isla orgánica esculpida: malla con costa irregular, meseta superior
+   * caminable y playa en pendiente hacia el mar. Colores por vértice
+   * (cima → arena → arena mojada) en lugar de cajas apiladas.
+   */
+  private addIsland(cx: number, cz: number, rx: number, rz: number, topY: number,
+    topColor: number, seed: number): void {
+    const SEG = 44;
+    const geo = new THREE.PlaneGeometry(2, 2, SEG, SEG);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const colors = new Float32Array(pos.count * 3);
+    const cTop = new THREE.Color(topColor);
+    const cSand = new THREE.Color(0xeed3a0);
+    const cWet = new THREE.Color(0xc9a96e);
+    const tmp = new THREE.Color();
+
+    for (let i = 0; i < pos.count; i++) {
+      const nx = pos.getX(i);
+      const nz = pos.getZ(i);
+      const ang = Math.atan2(nz, nx);
+      // Costa irregular: radio modulado por ángulo
+      const rMod = 1 + 0.09 * Math.sin(3 * ang + seed) + 0.06 * Math.sin(7 * ang + seed * 2.3);
+      const e = Math.hypot(nx, nz) / rMod;
+      // Perfil: meseta (e<0.78) → playa en pendiente → fondo marino
+      let h: number;
+      if (e < 0.78) {
+        h = topY + Math.sin(nx * 9 + seed) * Math.cos(nz * 8 + seed) * 0.05;
+      } else {
+        const t = Math.min((e - 0.78) / 0.27, 1);
+        const sm = t * t * (3 - 2 * t); // smoothstep
+        h = topY - sm * (topY + 1.5);
+      }
+      pos.setXYZ(i, nx * rx, h, nz * rz);
+      // Color por altura/borde: cima → arena seca → arena mojada
+      if (e < 0.7) tmp.copy(cTop);
+      else if (e < 0.85) tmp.copy(cTop).lerp(cSand, (e - 0.7) / 0.15);
+      else tmp.copy(cSand).lerp(cWet, Math.min((e - 0.85) / 0.15, 1));
+      colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.92, metalness: 0,
+    }));
+    mesh.position.set(cx, 0, cz);
+    mesh.receiveShadow = true;
+    this.group.add(mesh);
+    this.groundMeshes.push(mesh);
+    this.shores.push({ x: cx, z: cz, rx, rz });
+  }
+
   private addPlatform(x: number, yTop: number, z: number, w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(0.12, h * 0.25)), mat);
     mesh.position.set(x, yTop - h / 2, z);
     mesh.receiveShadow = true;
     mesh.castShadow = true;
@@ -142,8 +200,7 @@ export class LevelManager {
 
   /** Hub central: playa grande con aldea al sur y vistas a los 3 caminos. */
   private buildHub(): void {
-    this.addPlatform(0, 1, 0, 30, 3, 26, this.matGrass);
-    this.addPlatform(0, 0.4, 0, 34, 1.4, 30, this.matSand);
+    this.addIsland(0, 0, 17, 15, 1, 0x58b368, 1.7);
     this.checkpoints.push(new THREE.Vector3(0, 1, 8)); // spawn
 
     // Aldea pastel (zona segura)
@@ -167,20 +224,19 @@ export class LevelManager {
 
   /** El Faro del Alba: visible desde todo el nivel, con ruta en espiral. */
   private buildFaro(): void {
-    // Acantilado
-    this.addPlatform(0, 4, -24, 18, 6, 14, this.matGrass);
-    this.addPlatform(0, 3.4, -24, 20, 1.2, 16, this.matRock);
+    // Promontorio verde del faro (esculpido, se puede subir por la ladera)
+    this.addIsland(0, -24, 10.5, 9, 4, 0x58b368, 4.2);
     this.checkpoints.push(new THREE.Vector3(0, 4, -19));
 
     // Torre del faro (cuerpo + franjas + cabina)
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.6, 11, 12), this.matStone);
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.6, 11, 28), this.matStone);
     tower.position.set(0, 9.5, -26);
     tower.castShadow = true;
     this.group.add(tower);
     this.obstacles.push({ position: new THREE.Vector3(0, 4, -26), radius: 2.7 });
     for (const y of [6.5, 9.5, 12.5]) {
       const stripe = new THREE.Mesh(new THREE.CylinderGeometry(2.32 - (y - 6.5) * 0.06, 2.36 - (y - 6.5) * 0.06, 0.7, 12),
-        new THREE.MeshStandardMaterial({ color: 0x2aa6a0, flatShading: true }));
+        new THREE.MeshStandardMaterial({ color: 0x2aa6a0 }));
       stripe.position.set(0, y, -26);
       this.group.add(stripe);
     }
@@ -193,7 +249,7 @@ export class LevelManager {
     // Cristal del faro (se enciende al activarlo)
     this.faroCrystal = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.9),
-      new THREE.MeshStandardMaterial({ color: 0x9fb8c8, emissive: 0x223344, emissiveIntensity: 0.3, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x9fb8c8, emissive: 0x223344, emissiveIntensity: 0.3 }),
     );
     this.faroCrystal.position.set(0, 16.6, -26);
     this.group.add(this.faroCrystal);
@@ -214,7 +270,7 @@ export class LevelManager {
     for (let i = 0; i < 3; i++) {
       const socket = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.16),
-        new THREE.MeshStandardMaterial({ color: 0x6a6052, flatShading: true }),
+        new THREE.MeshStandardMaterial({ color: 0x6a6052 }),
       );
       const a = (i / 3) * Math.PI * 2;
       socket.position.set(Math.cos(a) * 0.55, 4.72, -19.5 + Math.sin(a) * 0.55);
@@ -241,7 +297,7 @@ export class LevelManager {
     this.group.add(fall);
     const door = new THREE.Mesh(
       new THREE.CylinderGeometry(1.3, 1.3, 0.25, 10),
-      new THREE.MeshStandardMaterial({ color: 0x2a3a52, emissive: 0x102040, emissiveIntensity: 0.5, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x2a3a52, emissive: 0x102040, emissiveIntensity: 0.5 }),
     );
     door.rotation.z = Math.PI / 2;
     door.position.set(9.4, 1.6, -22);
@@ -251,13 +307,13 @@ export class LevelManager {
 
   /** Playa oeste: arena de combate del Caracoral con las 3 rocas corruptas. */
   private buildWestZone(): void {
-    this.addPlatform(-26, 0.8, -4, 18, 2.2, 16, this.matSand);
+    this.addIsland(-26, -4, 11, 10, 0.8, 0xeed3a0, 8.9);
     this.checkpoints.push(new THREE.Vector3(-21, 0.8, -2));
 
     // Rocas corruptas de Noxia (solo la embestida del Caracoral las rompe)
     for (const [x, z] of [[-32, -9], [-21, -10.5], [-31.5, 2]] as const) {
       const rockGroup = new THREE.Group();
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 0), this.matNoxia);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 1), this.matNoxia);
       rock.position.y = 0.9;
       rock.rotation.set(Math.random(), Math.random(), 0);
       rock.castShadow = true;
@@ -273,8 +329,7 @@ export class LevelManager {
 
   /** Ruinas del este: el terreno de juego del olfato de Oryn. */
   private buildEastZone(): void {
-    this.addPlatform(26, 1.2, -6, 16, 2.6, 14, this.matGrass);
-    this.addPlatform(26, 0.5, -6, 18, 1.2, 16, this.matSand);
+    this.addIsland(26, -6, 10, 9, 1.2, 0x58b368, 13.4);
     this.checkpoints.push(new THREE.Vector3(21, 1.2, -4));
 
     // Ruinas antiguas
@@ -290,7 +345,7 @@ export class LevelManager {
     // Montículo donde está enterrada la reliquia (lo detecta Oryn)
     this.mound = new THREE.Mesh(
       new THREE.SphereGeometry(0.85, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xc9a96e, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0xc9a96e }),
     );
     this.mound.scale.y = 0.45;
     this.mound.position.copy(this.moundPos);
@@ -317,7 +372,7 @@ export class LevelManager {
     this.group.add(heartBase);
     const heart = new THREE.Mesh(
       new THREE.SphereGeometry(0.28, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xff6b8a, emissive: 0xa01030, emissiveIntensity: 0.6, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0xff6b8a, emissive: 0xa01030, emissiveIntensity: 0.6 }),
     );
     heart.position.set(8, 1.9, 9.5);
     heart.name = 'heartIcon';
@@ -326,8 +381,8 @@ export class LevelManager {
     this.obstacles.push({ position: new THREE.Vector3(8, 1, 9.5), radius: 0.9 });
 
     // Los Quiríes (su misión de las 5 notas llega en la próxima versión)
-    const grove = new THREE.Vector3(11.5, 1, 4);
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8, 0), this.matRock);
+    const grove = new THREE.Vector3(10.5, 1, 3.5);
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8, 1), this.matRock);
     rock.position.set(grove.x, 1.5, grove.z);
     this.group.add(rock);
     this.obstacles.push({ position: grove.clone(), radius: 0.9 });
@@ -342,7 +397,7 @@ export class LevelManager {
     this.group.add(shrine);
     const dimCrystal = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.35),
-      new THREE.MeshStandardMaterial({ color: 0x8a93a8, emissive: 0x202838, emissiveIntensity: 0.4, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x8a93a8, emissive: 0x202838, emissiveIntensity: 0.4 }),
     );
     dimCrystal.position.set(-11, 2.6, 6);
     this.group.add(dimCrystal);
@@ -362,7 +417,7 @@ export class LevelManager {
     this.group.add(base);
     const top = new THREE.Mesh(
       new THREE.CylinderGeometry(0.7, 0.7, 0.18, 10),
-      new THREE.MeshStandardMaterial({ color: 0x2ec4b6, emissive: 0x18887e, emissiveIntensity: 0.7, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x2ec4b6, emissive: 0x18887e, emissiveIntensity: 0.7 }),
     );
     top.position.set(x, yGround + 0.32, z);
     this.group.add(top);
@@ -379,7 +434,7 @@ export class LevelManager {
       [-30, -8], [-23, -9], [-29, 1], [-22, 2], [-26, -1], [-32, -4], [-20, -5],
     ];
     const mats = [0xf2917e, 0xffd34d, 0xe85a8a].map(
-      (c) => new THREE.MeshStandardMaterial({ color: c, flatShading: true }),
+      (c) => new THREE.MeshStandardMaterial({ color: c }),
     );
     flowers.forEach(([x, z], i) => {
       const flower = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 0), mats[i % 3]);
@@ -422,29 +477,16 @@ export class LevelManager {
   // ------------------------------------------------------------------
 
   private buildWater(): void {
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x2ec4b6, transparent: true, opacity: 0.82, flatShading: true,
-    });
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(360, 360, 24, 24), mat);
-    this.water.rotation.x = -Math.PI / 2;
-    this.water.position.y = 0.1;
-    this.group.add(this.water);
-
-    const shallowMat = new THREE.MeshBasicMaterial({ color: 0x7fe8dc, transparent: true, opacity: 0.45 });
-    const islands: [number, number, number][] = [[0, 0, 20], [-26, -4, 12], [26, -6, 11], [0, -24, 13]];
-    for (const [x, z, r] of islands) {
-      const shallow = new THREE.Mesh(new THREE.CircleGeometry(r, 24), shallowMat);
-      shallow.rotation.x = -Math.PI / 2;
-      shallow.position.set(x, 0.19, z);
-      this.group.add(shallow);
-    }
+    // Mar con shader: gradiente de profundidad, fresnel, caustics y espuma
+    // en la orilla de cada isla (ver WaterSurface.ts)
+    this.water2 = new WaterSurface(this.group as unknown as THREE.Scene, this.shores, new THREE.Vector3(18, 35, -10));
   }
 
   /** Fondo escénico: ciudad-acantilado lejana, farallones y veleros. */
   private buildVista(): void {
-    const cliffMat = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, flatShading: true });
-    const topMat = new THREE.MeshStandardMaterial({ color: 0x58b368, flatShading: true });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0xc96f4a, flatShading: true });
+    const cliffMat = new THREE.MeshStandardMaterial({ color: 0xd8c9a8 });
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x58b368 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xc96f4a });
 
     const cliffs: [number, number, number, number][] = [
       [46, -20, 14, 10], [50, -38, 18, 12], [44, -55, 12, 9],
@@ -471,8 +513,8 @@ export class LevelManager {
       this.group.add(roof);
     }
     // Veleros
-    const sailMat = new THREE.MeshStandardMaterial({ color: 0xfdf6e0, flatShading: true, side: THREE.DoubleSide });
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true });
+    const sailMat = new THREE.MeshStandardMaterial({ color: 0xfdf6e0, side: THREE.DoubleSide });
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
     for (const [x, z, rot] of [[-38, 14, 0.6], [40, 10, -0.8], [0, -45, 2.4]] as const) {
       const boat = new THREE.Group();
       const hull = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.7), hullMat);
@@ -490,18 +532,18 @@ export class LevelManager {
 
   private addHouse(x: number, yGround: number, z: number, wallColor: number, rotY = 0): void {
     const house = new THREE.Group();
-    const wall = new THREE.MeshStandardMaterial({ color: wallColor, flatShading: true });
+    const wall = new THREE.MeshStandardMaterial({ color: wallColor });
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.5, 1.6), wall);
     body.position.y = 0.75;
     body.castShadow = true;
     house.add(body);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.9, 4),
-      new THREE.MeshStandardMaterial({ color: 0xc96f4a, flatShading: true }));
+      new THREE.MeshStandardMaterial({ color: 0xc96f4a }));
     roof.position.y = 1.95;
     roof.rotation.y = Math.PI / 4;
     house.add(roof);
     const door = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.8, 0.06),
-      new THREE.MeshStandardMaterial({ color: 0x7a4a2e, flatShading: true }));
+      new THREE.MeshStandardMaterial({ color: 0x7a4a2e }));
     door.position.set(0, 0.4, 0.83);
     house.add(door);
     house.position.set(x, yGround, z);
@@ -553,7 +595,7 @@ export class LevelManager {
     trunk.position.y = 0.9 * scale;
     trunk.castShadow = true;
     tree.add(trunk);
-    const blobGeo = new THREE.IcosahedronGeometry(0.75 * scale, 0);
+    const blobGeo = new THREE.IcosahedronGeometry(0.75 * scale, 2);
     for (const [ox, oy, oz] of [[0, 2.1, 0], [0.5, 1.8, 0.3], [-0.5, 1.85, -0.2], [0.1, 1.75, -0.5]]) {
       const blob = new THREE.Mesh(blobGeo, this.matLeaf);
       blob.position.set(ox * scale, oy * scale, oz * scale);
@@ -578,8 +620,8 @@ export class LevelManager {
     this.addTree(20, 1.2, -11, 1.0);
     this.addTree(33, 1.2, 0, 0.85);
     // Acantilado del faro
-    this.addTree(-7, 4, -28, 1.15);
-    this.addTree(7, 4, -29, 0.9);
+    this.addTree(-5, 4, -27, 1.15);
+    this.addTree(5.2, 4, -27.5, 0.9);
     // Estandartes marcando los caminos
     this.addBanner(-1.8, 1, -6.5, 0x2ec4b6);
     this.addBanner(1.8, 1, -6.5, 0xffd34d);
@@ -587,7 +629,7 @@ export class LevelManager {
     this.addBanner(14.5, 1, -3.8, 0xffd34d);
     // Flores del hub
     const flowerMats = [0xf2917e, 0xffd34d, 0xe85a8a].map(
-      (c) => new THREE.MeshStandardMaterial({ color: c, flatShading: true }));
+      (c) => new THREE.MeshStandardMaterial({ color: c }));
     const spots: [number, number][] = [
       [-3, 4], [4, 2], [-8, 1], [7, -3], [-4, -7], [10, 7], [-9, 8], [2, -10],
     ];
@@ -603,21 +645,21 @@ export class LevelManager {
     pole.position.set(x, yGround + 1.2, z);
     this.group.add(pole);
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.4),
-      new THREE.MeshStandardMaterial({ color, flatShading: true, side: THREE.DoubleSide }));
+      new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide }));
     flag.position.set(x + (x > 0 ? -0.36 : 0.36), yGround + 2.15, z);
     this.group.add(flag);
   }
 
   private buildQuiriesAt(spots: [number, number, number][]): void {
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xffe28a, emissive: 0xc9962a, emissiveIntensity: 0.8, flatShading: true,
+      color: 0xffe28a, emissive: 0xc9962a, emissiveIntensity: 0.8,
     });
     for (const [x, y, z] of spots) {
       const quiri = new THREE.Group();
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 7), bodyMat);
       quiri.add(body);
       const beak = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.09, 5),
-        new THREE.MeshStandardMaterial({ color: 0xc96f4a, flatShading: true }));
+        new THREE.MeshStandardMaterial({ color: 0xc96f4a }));
       beak.position.set(0, 0, 0.12);
       beak.rotation.x = Math.PI / 2;
       quiri.add(beak);
@@ -646,7 +688,7 @@ export class LevelManager {
   }
 
   private addCrate(x: number, yGround: number, z: number): void {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.matCrate);
+    const mesh = new THREE.Mesh(new RoundedBoxGeometry(1, 1, 1, 2, 0.09), this.matCrate);
     mesh.position.set(x, yGround + 0.5, z);
     mesh.castShadow = true;
     this.group.add(mesh);
@@ -685,8 +727,8 @@ export class LevelManager {
     def(-24, 0.8, -8, -28, 0.8, 0);      // playa oeste 1
     def(-31, 0.8, -2, -23, 0.8, -3);     // playa oeste 2
     def(22, 1.2, -9, 30, 1.2, -7);       // ruinas este
-    def(-6, 4, -20, 6, 4, -20);          // acantilado del faro 1
-    def(5, 4, -28, -5, 4, -28);          // acantilado del faro 2
+    def(-4.5, 4, -20.5, 4.5, 4, -20.5);  // promontorio del faro 1
+    def(4, 4, -27.5, -4, 4, -27.5);      // promontorio del faro 2
   }
 
   breakCratesNear(center: THREE.Vector3, radius: number): THREE.Vector3[] {
@@ -707,7 +749,7 @@ export class LevelManager {
   /** Animaciones ambientales. */
   update(dt: number): void {
     this.time += dt;
-    this.water.position.y = 0.1 + Math.sin(this.time * 0.8) * 0.05;
+    this.water2.update(dt);
     for (const q of this.quiries) {
       q.mesh.scale.setScalar(1 + Math.sin(this.time * 5 + q.phase) * 0.12);
     }

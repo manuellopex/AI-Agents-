@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { AudioManager } from './AudioManager';
 import { CameraController } from './CameraController';
 import { CaracoralBrute } from './CaracoralBrute';
@@ -12,6 +17,7 @@ import { LevelManager } from './LevelManager';
 import { Liora } from './Liora';
 import { MobileInputController } from './MobileInputController';
 import { PlayerController } from './PlayerController';
+import { SkyDome } from './SkyDome';
 import { UIManager } from './UIManager';
 
 type GameState = 'ready' | 'playing' | 'paused' | 'faro' | 'defeat';
@@ -27,6 +33,9 @@ type GameState = 'ready' | 'playing' | 'paused' | 'faro' | 'defeat';
 export class GameManager {
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer;
+  private composer!: EffectComposer;
+  private bloomPass!: UnrealBloomPass;
+  private envTexture: THREE.Texture | null = null;
   private state: GameState = 'ready';
   private rafId = 0;
   private clock = new THREE.Clock();
@@ -69,7 +78,7 @@ export class GameManager {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.05;
     this.renderer.domElement.style.cssText = 'position:absolute;inset:0;display:block;';
     container.appendChild(this.renderer.domElement);
 
@@ -143,12 +152,25 @@ export class GameManager {
 
   private buildWorld(): void {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x7fd4e8);
-    this.scene.fog = new THREE.Fog(0x9fdcec, 45, 140);
+    this.scene.fog = new THREE.Fog(0x9fd6e8, 60, 170);
 
-    const hemi = new THREE.HemisphereLight(0xd8f0ff, 0x8fb573, 1.0);
+    // Iluminación ambiental basada en imagen: reflejos y profundidad reales
+    if (!this.envTexture) {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+    }
+    this.scene.environment = this.envTexture;
+    // El IBL sustituye gran parte de la luz ambiente: bajarlo para no quemar
+    this.scene.environmentIntensity = 0.4;
+
+    // Cielo procedural: gradiente + sol con halo (alimenta el bloom)
+    const sunDir = new THREE.Vector3(18, 35, -10);
+    new SkyDome(this.scene, sunDir);
+
+    const hemi = new THREE.HemisphereLight(0xd8f0ff, 0x8fb573, 0.35);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffdf9e, 1.7);
+    const sun = new THREE.DirectionalLight(0xffdf9e, 1.25);
     sun.position.set(18, 35, -10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -181,6 +203,18 @@ export class GameManager {
     this.liora = new Liora(this.scene, [this.level.checkpoints[0]], this.level.faroPedestalPos);
     this.cameraCtrl = new CameraController(this.container.clientWidth / Math.max(this.container.clientHeight, 1));
     this.cameraCtrl.snapTo(this.player.position);
+
+    // Post-procesado: render + bloom (la magia brilla de verdad) + salida
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.cameraCtrl.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(this.container.clientWidth, this.container.clientHeight),
+      0.38,  // intensidad
+      0.5,   // radio
+      0.92,  // umbral alto: solo brilla lo realmente luminoso (emisivos, sol)
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
 
     // El Destello del Faro espera en la cima desde el principio (visible al subir)
     this.destellos.spawnVisual('faro', this.level.faroDestelloPos);
@@ -494,7 +528,7 @@ export class GameManager {
     this.level.update(dt);
     this.effects.update(dt);
 
-    this.renderer.render(this.scene, this.cameraCtrl.camera);
+    this.composer.render();
   };
 
   /** Reacciones contextuales al explorar. */
@@ -510,6 +544,7 @@ export class GameManager {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
+    this.composer?.setSize(w, h);
     this.cameraCtrl.resize(w / Math.max(h, 1));
   };
 

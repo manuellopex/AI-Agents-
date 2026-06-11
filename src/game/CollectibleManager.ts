@@ -26,7 +26,7 @@ export class CollectibleManager {
     color: 0x4de3ff,
     emissive: 0x18b9e8,
     emissiveIntensity: 0.9,
-    flatShading: true,
+   
   });
   private time = 0;
 

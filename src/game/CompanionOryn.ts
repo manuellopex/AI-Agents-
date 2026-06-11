@@ -33,18 +33,18 @@ export class CompanionOryn {
 
   constructor(scene: THREE.Scene) {
     // Cuerpo: gota redondeada blanco-hielo con barriga crema (perrito marino)
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8f4ff, flatShading: true });
-    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), bodyMat);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8f4ff });
+    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 2), bodyMat);
     body.scale.set(1, 1.15, 1);
     this.group.add(body);
 
-    const bellyMat = new THREE.MeshStandardMaterial({ color: 0xfdf3d8, flatShading: true });
+    const bellyMat = new THREE.MeshStandardMaterial({ color: 0xfdf3d8 });
     const belly = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), bellyMat);
     belly.position.set(0, -0.05, 0.16);
     this.group.add(belly);
 
     // Orejas largas (el rasgo que conservó de su forma original)
-    const earMat = new THREE.MeshStandardMaterial({ color: 0x4ea8d8, flatShading: true });
+    const earMat = new THREE.MeshStandardMaterial({ color: 0x4ea8d8 });
     for (const side of [-1, 1]) {
       const ear = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.5, 5), earMat);
       ear.position.set(0.12 * side, 0.42, -0.05);
