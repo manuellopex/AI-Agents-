@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { applyCloudShadows } from './CloudShadows';
 import type { CorruptRock } from './CaracoralBrute';
 import { WaterSurface, IslandShore } from './WaterSurface';
 
@@ -130,6 +131,12 @@ export class LevelManager {
   private matGoldGlow = new THREE.MeshStandardMaterial({
     color: 0xffd34d, emissive: 0xffaa00, emissiveIntensity: 0.8,
   });
+  /** Material único del terreno: vertex colors + nubes + matices splat. */
+  private terrainMat = (() => {
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+    applyCloudShadows(mat, true);
+    return mat;
+  })();
 
   constructor(scene: THREE.Scene) {
     this.buildTerrain();
@@ -204,9 +211,7 @@ export class LevelManager {
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
 
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      vertexColors: true, roughness: 0.92, metalness: 0,
-    }));
+    const mesh = new THREE.Mesh(geo, this.terrainMat);
     mesh.position.set(cx, 0, cz);
     mesh.receiveShadow = true;
     this.group.add(mesh);
@@ -236,6 +241,7 @@ export class LevelManager {
     const total = rings.reduce((sum, r) => sum + r[5], 0);
     const geo = new THREE.DodecahedronGeometry(1, 0);
     const mat = new THREE.MeshStandardMaterial({ color: 0xb9b09b, roughness: 0.95 });
+    applyCloudShadows(mat);
     const rocks = new THREE.InstancedMesh(geo, mat, total);
     rocks.frustumCulled = false;
     const dummy = new THREE.Object3D();

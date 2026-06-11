@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyCloudShadows } from './CloudShadows';
 
 /** Zona elíptica donde sembrar vegetación. */
 export interface VegetationZone {
@@ -30,6 +31,7 @@ export class Vegetation {
     const geo = new THREE.ConeGeometry(0.07, 0.5, 5);
     geo.translate(0, 0.25, 0);
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+    applyCloudShadows(mat);
     this.grass = new THREE.InstancedMesh(geo, mat, total);
     this.grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.grass.frustumCulled = false;

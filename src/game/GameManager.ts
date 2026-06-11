@@ -9,6 +9,7 @@ import { AudioManager } from './AudioManager';
 import { CameraController } from './CameraController';
 import { CaracoralBrute } from './CaracoralBrute';
 import { CollectibleManager } from './CollectibleManager';
+import { cloudTimeUniform } from './CloudShadows';
 import { CompanionOryn } from './CompanionOryn';
 import { CutsceneSystem } from './CutsceneSystem';
 import { ElariaApparition } from './ElariaApparition';
@@ -816,6 +817,7 @@ export class GameManager {
     this.effects.update(dt);
     this.vegetation.update(dt);
     this.atmosphere.update(dt);
+    cloudTimeUniform.value += dt;
 
     this.updateAdaptiveQuality(dt);
     this.composer.render();
