@@ -197,6 +197,18 @@ export class GameManager {
   // ------------------------------------------------------------------
 
   private wireUi(): void {
+    // Música del menú al primer toque en la pantalla de título (los
+    // navegadores exigen un gesto del usuario para reproducir audio).
+    const firstTouch = (): void => {
+      if (this.state !== 'ready') {
+        window.removeEventListener('pointerdown', firstTouch);
+        return;
+      }
+      this.audio.init();
+      this.audio.startMenuMusic();
+      window.removeEventListener('pointerdown', firstTouch);
+    };
+    window.addEventListener('pointerdown', firstTouch);
     this.ui.onStart = () => {
       this.audio.init();
       this.ui.hideOverlay();

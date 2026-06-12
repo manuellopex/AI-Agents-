@@ -1,14 +1,17 @@
 /**
  * AudioManager
  * -------------
- * Genera todos los sonidos del juego con WebAudio (sintetizados, sin assets).
- * Son placeholders fáciles de reemplazar por archivos reales más adelante:
- * basta con sustituir el cuerpo de cada método play* por la reproducción
- * de un AudioBuffer.
+ * Efectos sintetizados con WebAudio + dos pistas de música reales
+ * (public/audio/): menu.mp3 al 45 % para la pantalla de título y
+ * music.mp3 al 35 % durante el juego. Si faltan los archivos, un
+ * arpegio sintetizado cubre la música del juego.
  */
 export class AudioManager {
   private ctx: AudioContext | null = null;
-  /** Pista de música real (public/audio/music.mp3) si el archivo existe. */
+  /** Pista del menú (public/audio/menu.mp3) — volumen 45 %. */
+  private menuTrack: HTMLAudioElement | null = null;
+  private menuTrackReady = false;
+  /** Pista del juego (public/audio/music.mp3) — volumen 35 %. */
   private musicTrack: HTMLAudioElement | null = null;
   private musicTrackReady = false;
   private masterGain: GainNode | null = null;
@@ -16,22 +19,36 @@ export class AudioManager {
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   private musicStep = 0;
   private muted = false;
+  /** Qué pista debería sonar ahora (las cargas terminan en cualquier momento). */
+  private desired: 'menu' | 'game' | 'none' = 'none';
 
   /** Debe llamarse tras un gesto del usuario (requisito de los navegadores). */
   init(): void {
     if (this.ctx) return;
-    // Música real del juego: si hay un MP3 en public/audio/, sustituye al sinte
-    try {
-      const path = window.location.pathname;
-      const idx = path.indexOf('/game');
-      const base = idx > 0 ? path.slice(0, idx) : '';
-      const track = new Audio(`${base}/audio/music.mp3`);
-      track.loop = true;
-      track.volume = 0.35;
-      track.addEventListener('canplaythrough', () => { this.musicTrackReady = true; }, { once: true });
-      track.addEventListener('error', () => { this.musicTrack = null; }, { once: true });
-      this.musicTrack = track;
-    } catch { this.musicTrack = null; }
+    const path = window.location.pathname;
+    const idx = path.indexOf('/game');
+    const base = idx > 0 ? path.slice(0, idx) : '';
+    const loadTrack = (file: string, volume: number, onReady: () => void): HTMLAudioElement | null => {
+      try {
+        const track = new Audio(`${base}/audio/${file}`);
+        track.loop = true;
+        track.volume = volume;
+        track.addEventListener('canplaythrough', onReady, { once: true });
+        return track;
+      } catch { return null; }
+    };
+    this.menuTrack = loadTrack('menu.mp3', 0.45, () => {
+      this.menuTrackReady = true;
+      if (this.desired === 'menu' && !this.muted) void this.menuTrack?.play().catch(() => undefined);
+    });
+    this.musicTrack = loadTrack('music.mp3', 0.35, () => {
+      this.musicTrackReady = true;
+      if (this.desired === 'game') {
+        // El MP3 real releva al arpegio sintetizado en cuanto está listo
+        if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; }
+        if (!this.muted) void this.musicTrack?.play().catch(() => undefined);
+      }
+    });
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx();
     this.masterGain = this.ctx.createGain();
@@ -46,6 +63,7 @@ export class AudioManager {
     this.muted = muted;
     if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.5;
     if (this.musicTrack) this.musicTrack.muted = muted;
+    if (this.menuTrack) this.menuTrack.muted = muted;
   }
 
   /** Tono simple con envolvente. Base de todos los efectos. */
@@ -86,8 +104,17 @@ export class AudioManager {
   playDig(): void { this.tone(200, 0.15, 'square', 0.18, 120); setTimeout(() => this.tone(160, 0.15, 'square', 0.16, 100), 120); }
   playDefeat(): void { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => this.tone(f, 0.4, 'triangle', 0.22), i * 180)); }
 
-  /** Música: la pista real si existe; si no, arpegio placeholder. */
+  /** Música del menú (45 %): suena en la pantalla de título. */
+  startMenuMusic(): void {
+    this.desired = 'menu';
+    this.musicTrack?.pause();
+    if (this.menuTrackReady && !this.muted) void this.menuTrack?.play().catch(() => undefined);
+  }
+
+  /** Música del juego (35 %): la pista real si existe; si no, arpegio placeholder. */
   startMusic(): void {
+    this.desired = 'game';
+    this.menuTrack?.pause();
     if (this.musicTrack && this.musicTrackReady) {
       if (!this.muted) void this.musicTrack.play().catch(() => undefined);
       return;
@@ -114,7 +141,9 @@ export class AudioManager {
   }
 
   stopMusic(): void {
+    this.desired = 'none';
     this.musicTrack?.pause();
+    this.menuTrack?.pause();
     if (this.musicTimer) {
       clearInterval(this.musicTimer);
       this.musicTimer = null;
@@ -124,6 +153,8 @@ export class AudioManager {
   dispose(): void {
     this.musicTrack?.pause();
     this.musicTrack = null;
+    this.menuTrack?.pause();
+    this.menuTrack = null;
     this.ctx?.close();
     this.ctx = null;
   }

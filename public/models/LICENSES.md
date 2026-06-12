@@ -19,6 +19,14 @@ props, bajo licencia MIT. Cada carpeta incluye su copia de la licencia.
 - Archivos: `flag.glb` (banderas de checkpoint), `brick.glb` (cajas
   rompibles), `Textures/colormap.png`
 
+## Superpowers Asset Packs — música (`public/audio/`)
+
+- Fuente: https://github.com/sparklinlabs/superpowers-asset-packs
+- Licencia: CC0 1.0 (dominio público, sin atribución obligatoria)
+- Archivos: `audio/menu.mp3` (Ninja Adventure "Theme 6") y
+  `audio/music.mp3` (Ninja Adventure "Theme 1"), normalizados a −16 LUFS
+  y recodificados a MP3 128 kbps
+
 ## Notas técnicas
 
 - Los `.glb` de Kenney referencian `Textures/colormap.png` con ruta relativa:
