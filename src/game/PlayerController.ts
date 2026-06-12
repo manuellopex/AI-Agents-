@@ -36,18 +36,21 @@ export class PlayerController {
 
   /** Trampolines del nivel (los inyecta el GameManager). */
   pads: { position: THREE.Vector3; power: number }[] = [];
+  /** Corrientes de viento ascendentes: {x, z, radio, topY, empuje}. */
+  updrafts: { x: number; z: number; r: number; topY: number; lift: number }[] = [];
   /** Yaw de la cámara: el joystick se interpreta relativo a ella. */
   cameraYaw = 0;
   /** true mientras cae en ground pound (golpea al aterrizar). */
   pounding = false;
 
-  // --- Parámetros de movimiento (ajustables) ---
-  private readonly walkSpeed = 3.5;
-  private readonly runSpeed = 7;
+  // --- Métricas de gameplay (spec de escala clásica, 1 unidad = 1 m) ---
+  private readonly walkSpeed = 3.5;       // caminar 3.5 m/s
+  private readonly runSpeed = 6.2;        // correr 6.2 m/s
   private readonly gravity = 28;
-  private readonly jumpVelocity = 11;
-  private readonly doubleJumpVelocity = 10;
-  private readonly maxStepHeight = 0.55;
+  private readonly jumpVelocity = 9.5;    // altura de salto ≈ 1.6 m
+  private readonly doubleJumpVelocity = 9.5; // total con doble ≈ 3.2 m
+  private readonly maxStepHeight = 0.6;   // escalones y pendientes
+  private readonly mantleHeight = 1.25;   // ledge assist hasta 1.2 m
   private readonly playerRadius = 0.45;
 
   private input: MobileInputController;
@@ -227,6 +230,14 @@ export class PlayerController {
 
   private applyPhysics(dt: number): void {
     this.velocity.y -= this.gravity * dt;
+    // Corrientes de viento: elevan mientras estés dentro de la columna
+    for (const u of this.updrafts) {
+      const dx = this.group.position.x - u.x;
+      const dz = this.group.position.z - u.z;
+      if (dx * dx + dz * dz < u.r * u.r && this.group.position.y < u.topY) {
+        this.velocity.y = Math.min(this.velocity.y + u.lift * dt, 9);
+      }
+    }
     const prevY = this.group.position.y;
     this.group.position.x += this.velocity.x * dt;
     this.group.position.z += this.velocity.z * dt;
@@ -275,10 +286,16 @@ export class PlayerController {
           }
         }
       } else if (wasGrounded && feet < groundY - this.maxStepHeight && this.velocity.y <= 0 && prevY < groundY) {
-        // Estamos contra la pared lateral de una plataforma más alta:
-        // deshacer movimiento horizontal para no atravesarla.
-        this.group.position.x -= this.velocity.x * dt;
-        this.group.position.z -= this.velocity.z * dt;
+        const ledge = groundY - feet;
+        if (ledge <= this.mantleHeight) {
+          // Ledge assist: bordillos de hasta 1.2 m se montan con un impulso
+          this.velocity.y = Math.sqrt(2 * this.gravity * (ledge + 0.25));
+          this.grounded = false;
+        } else {
+          // Pared real: deshacer el movimiento horizontal
+          this.group.position.x -= this.velocity.x * dt;
+          this.group.position.z -= this.velocity.z * dt;
+        }
       }
     }
   }
@@ -321,8 +338,8 @@ export class PlayerController {
         this.currentAttack = 'punch';
         this.attackTimer = 0.32;
         const dir = new THREE.Vector3(Math.sin(this.bodyGroup.rotation.y), 0, Math.cos(this.bodyGroup.rotation.y));
-        this.velocity.x = dir.x * 12;
-        this.velocity.z = dir.z * 12;
+        this.velocity.x = dir.x * 12.5;
+        this.velocity.z = dir.z * 12.5;
         const hitCenter = this.group.position.clone().addScaledVector(dir, 1.3);
         this.onAttack?.(hitCenter, 1.3, 'punch');
       } else {

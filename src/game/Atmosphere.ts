@@ -24,8 +24,8 @@ export class Atmosphere {
     });
     const spots: [number, number, number, number][] = [
       // x, y, z, escala
-      [-50, 34, -50, 1.4], [30, 40, -70, 1.8], [60, 36, -10, 1.2],
-      [-65, 42, 10, 1.6], [10, 38, 40, 1.3], [-20, 44, -85, 2.0],
+      [-150, 95, -120, 3.2], [90, 120, -190, 4], [170, 100, -30, 3],
+      [-190, 125, 40, 3.6], [40, 110, 150, 3.2], [-60, 135, -230, 4.4],
     ];
     for (const [x, y, z, s] of spots) {
       const cloud = new THREE.Group();
@@ -51,7 +51,7 @@ export class Atmosphere {
     const wingMat = new THREE.MeshStandardMaterial({ color: 0xf6dfb4, side: THREE.DoubleSide, roughness: 0.8 });
     const orbits: [number, number, number, number, number][] = [
       // cx, cy, cz, radio, velocidad
-      [0, 16, -20, 22, 0.25], [10, 26, -44, 12, 0.35], [-20, 10, 10, 16, 0.3], [25, 13, -5, 14, -0.28],
+      [0, 40, -60, 70, 0.12], [10, 95, -165, 28, 0.22], [-60, 22, 60, 45, 0.16], [80, 28, 0, 40, -0.14],
     ];
     for (const [cx, cy, cz, radius, speed] of orbits) {
       const bird = new THREE.Group();
@@ -83,7 +83,7 @@ export class Atmosphere {
     // Nubes a la deriva con viento del oeste; reaparecen por el otro lado
     for (const cloud of this.clouds) {
       cloud.group.position.x += cloud.speed * dt;
-      if (cloud.group.position.x > 95) cloud.group.position.x = -95;
+      if (cloud.group.position.x > 260) cloud.group.position.x = -260;
     }
     // Aves: órbita circular orientada a la tangente + aleteo
     for (const bird of this.birds) {

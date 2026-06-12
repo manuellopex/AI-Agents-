@@ -18,10 +18,10 @@ export class CameraController {
   yaw = 0;
 
   /** Altura y distancia respecto al jugador. */
-  private readonly height = 7.4;
-  private readonly distance = 9.0;
+  private readonly height = 8.6;
+  private readonly distance = 11.5;
   /** El punto de mira: adelantado y bajo, jugador en el tercio inferior. */
-  private readonly lookAheadDist = 7.5;
+  private readonly lookAheadDist = 9.0;
   private readonly lookAheadY = 1.4;
   private readonly followLerp = 4.5;
   private readonly lookLerp = 5.5;
@@ -34,7 +34,7 @@ export class CameraController {
   private initialized = false;
 
   constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(62, aspect, 0.1, 250);
+    this.camera = new THREE.PerspectiveCamera(62, aspect, 0.1, 800);
   }
 
   /** Coloca la cámara instantáneamente (inicio o respawn). */

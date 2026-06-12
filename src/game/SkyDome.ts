@@ -59,7 +59,7 @@ export class SkyDome {
 
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), material);
     // Escala enorme + frustumCulled off: la posición xyww la fija al fondo
-    this.mesh.scale.setScalar(400);
+    this.mesh.scale.setScalar(1600);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
     scene.add(this.mesh);

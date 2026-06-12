@@ -47,8 +47,8 @@ export class Vegetation {
         const r = Math.sqrt(Math.random());
         const x = zone.cx + Math.cos(a) * r * zone.rx;
         const z = zone.cz + Math.sin(a) * r * zone.rz;
-        raycaster.set(new THREE.Vector3(x, 40, z), down);
-        raycaster.far = 60;
+        raycaster.set(new THREE.Vector3(x, 130, z), down);
+        raycaster.far = 160;
         const hit = raycaster.intersectObjects(groundMeshes, false)[0];
         if (!hit || hit.point.y < 0.4) continue; // ni en el mar ni en la playa baja
         this.blades.push({

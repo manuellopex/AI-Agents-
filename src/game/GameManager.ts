@@ -69,6 +69,7 @@ export class GameManager {
   private health = new HealthSystem();
   private cutscene!: CutsceneSystem;
   private elaria!: ElariaApparition;
+  private sun!: THREE.DirectionalLight;
   private vegetation!: Vegetation;
   private atmosphere!: Atmosphere;
   /** Estado al que volver cuando termina la cutscene. */
@@ -80,14 +81,17 @@ export class GameManager {
   private qualityLowered = false;
   /** ?fx=off — render directo sin postproceso (depuración). */
   private directRender = false;
+  /** ?view=top|side — vistas de validación de blockout con etiquetas. */
+  private debugView: string | null = null;
 
   // Estado de aventura
   private faroDone = false;
   private playerInCave = false;
   private notesCollected = 0;
-  /** Arena de oleadas: -1 inactiva, 0-2 oleada en curso, 3 completada. */
-  private arenaWave = -1;
-  private arenaBaseline = 0;
+  /** Desafío cronometrado: plataformas temporales + timer (spec §8). */
+  private challengeActive = false;
+  private challengeDone = false;
+  private challengeTimer = 0;
   private storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
   private triggerCooldowns = new Map<string, number>();
   private secretsFound = new Set<string>();
@@ -128,7 +132,59 @@ export class GameManager {
     this.handleResize();
     window.addEventListener('resize', this.handleResize);
     this.ui.setStartReady(true);
+    if (this.debugView) {
+      this.ui.hideOverlay();
+      this.ui.setHudVisible(false);
+    }
     this.loop();
+  }
+
+  /** Vistas de blockout (FASE 5): top con grid o alzado lateral. */
+  private setupDebugView(view: string): void {
+    const cam = this.cameraCtrl.camera;
+    cam.far = 1600;
+    this.scene.fog = null; // vistas técnicas: sin niebla
+    if (view === 'top') {
+      cam.position.set(0, 560, -10);
+      cam.up.set(0, 0, -1);
+      cam.lookAt(0, 0, -10);
+      const grid = new THREE.GridHelper(440, 22, 0xffffff, 0x88aabb);
+      (grid.material as THREE.Material).transparent = true;
+      (grid.material as THREE.Material).opacity = 0.35;
+      grid.position.set(0, 3, -10);
+      this.scene.add(grid);
+    } else {
+      // Alzado desde el OESTE (la sala de la Cueva Azul está al este, fuera)
+      cam.position.set(-620, 95, -40);
+      cam.lookAt(0, 55, -40);
+    }
+    cam.updateProjectionMatrix();
+    // Etiquetas de zona (comentarios en escena)
+    const zones: [string, number, number, number][] = [
+      ['1 HUB PLAYA', 0, 14, 140], ['2 CORAL', -85, 16, 80], ['3 CUEVA AZUL', -79, 34, -60],
+      ['4 RUTA VERTICAL', 4, 62, -124], ['5 FARO', 0, 122, -170], ['6 ARBOLEDA', 95, 36, 35],
+      ['7 SENDERO ORYN', 58, 28, -18], ['8 DESAFIO', -55, 50, -95],
+      ['CIUDAD BAJA y12', 0, 26, -20], ['CIUDAD MEDIA y28', 0, 44, -75], ['DISTRITO ALTO y58', 0, 76, -130],
+    ];
+    for (const [text, x, y, z] of zones) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 96;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = 'rgba(4,20,28,0.75)';
+      ctx.fillRect(0, 0, 512, 96);
+      ctx.font = 'bold 52px sans-serif';
+      ctx.fillStyle = '#ffe9a0';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 256, 48);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(canvas), depthTest: false, fog: false,
+      }));
+      sprite.position.set(x, y, z);
+      sprite.scale.set(36, 6.75, 1);
+      sprite.renderOrder = 999;
+      this.scene.add(sprite);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -250,7 +306,7 @@ export class GameManager {
 
   private buildWorld(): void {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x9fd6e8, 80, 230);
+    this.scene.fog = new THREE.Fog(0x9fd6e8, 160, 560);
 
     // Iluminación ambiental basada en imagen: reflejos y profundidad reales
     if (!this.envTexture) {
@@ -269,16 +325,16 @@ export class GameManager {
     const hemi = new THREE.HemisphereLight(0xd8f0ff, 0x8fb573, 0.35);
     this.scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffdf9e, 1.25);
-    sun.position.set(18, 35, -10);
+    sun.position.set(60, 120, 40);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -58;
-    sun.shadow.camera.right = 58;
-    sun.shadow.camera.top = 62;
-    sun.shadow.camera.bottom = -62;
-    sun.shadow.camera.far = 140;
-    sun.target.position.set(0, 0, -10);
+    sun.shadow.camera.left = -70;
+    sun.shadow.camera.right = 70;
+    sun.shadow.camera.top = 75;
+    sun.shadow.camera.bottom = -75;
+    sun.shadow.camera.far = 400;
     this.scene.add(sun, sun.target);
+    this.sun = sun;
 
     this.effects = new Effects(this.scene);
     this.level = new LevelManager(this.scene, this.assets);
@@ -296,8 +352,9 @@ export class GameManager {
       this.level.checkpoints, this.level.killY,
     );
     this.player.pads = this.level.pads;
+    this.player.updrafts = this.level.updrafts;
     // Modelo final de Mael (public/models/mael.glb): se enchufa solo
-    const maelModel = this.assets.getClone('mael', 1.75);
+    const maelModel = this.assets.getClone('mael', 1.72);
     if (maelModel) this.player.useGltfModel(maelModel, this.assets.getAnimations('mael'));
     this.oryn = new CompanionOryn(this.scene);
     this.oryn.setSecret(this.level.orynZoneCenter, this.level.orynZoneRadius, this.level.moundPos);
@@ -308,10 +365,12 @@ export class GameManager {
     this.elaria = new ElariaApparition(this.scene);
     // Capas de profundidad: hierba con viento, nubes y aves en órbita
     this.vegetation = new Vegetation(this.scene, this.level.groundMeshes, [
-      { cx: 0, cz: 8, rx: 34, rz: 22, count: 130 },     // playa sur / hub
-      { cx: 0, cz: -22, rx: 25, rz: 18, count: 90 },    // meseta central
-      { cx: 0, cz: -40, rx: 17, rz: 12, count: 60 },    // tierras altas
-      { cx: -36, cz: 4, rx: 9, rz: 8, count: 30 },      // arenal del coral
+      { cx: 0, cz: 120, rx: 70, rz: 60, count: 150 },    // playa / hub
+      { cx: -85, cz: 80, rx: 42, rz: 25, count: 50 },    // playa del Coral
+      { cx: 0, cz: -22, rx: 48, rz: 30, count: 80 },     // distrito bajo
+      { cx: 0, cz: -78, rx: 60, rz: 42, count: 90 },     // ciudad media
+      { cx: 0, cz: -135, rx: 45, rz: 38, count: 50 },    // distrito alto
+      { cx: 95, cz: 35, rx: 38, rz: 30, count: 80 },     // arboleda
     ]);
     this.atmosphere = new Atmosphere(this.scene);
 
@@ -326,6 +385,8 @@ export class GameManager {
     );
     const params = new URLSearchParams(window.location.search);
     if (params.get('bloom') === 'off') this.bloomPass.enabled = false;
+    this.debugView = params.get('view');
+    if (this.debugView) this.setupDebugView(this.debugView);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
     this.directRender = params.get('fx') === 'off';
@@ -340,7 +401,8 @@ export class GameManager {
     this.faroDone = false;
     this.playerInCave = false;
     this.notesCollected = 0;
-    this.arenaWave = -1;
+    this.challengeActive = false;
+    this.challengeDone = false;
     this.health.reset();
     this.storyFlags = { firstLuma: false, firstKill: false, bruteSeen: false };
     this.triggerCooldowns.clear();
@@ -581,12 +643,14 @@ export class GameManager {
           break;
         case 'desafio':
           this.secretsFound.add('desafio');
-          if (this.destellos.isComplete('desafio') || this.arenaWave >= 0) break;
-          // Arranca la arena de oleadas (baseline = enemigos del mundo vivos)
-          this.arenaWave = 0;
-          this.arenaBaseline = this.enemies.aliveCount;
-          this.spawnArenaWave();
-          this.ui.say('Elaria', 'El santuario despierta… ¡resiste sus tres oleadas, Mael!');
+          if (this.destellos.isComplete('desafio') || this.challengeActive) break;
+          // Reto cronometrado: plataformas temporales hasta el pedestal
+          this.challengeActive = true;
+          this.challengeTimer = 45;
+          this.level.setChallengeActive(true);
+          this.audio.playCharge();
+          this.ui.showBanner('⏱ ¡45 segundos!', 'auralis', 2200);
+          this.ui.say('Elaria', 'Las plataformas no esperarán: alcanza el pedestal antes de que se desvanezcan.');
           break;
         case 'cueva':
           this.secretsFound.add('cueva');
@@ -738,48 +802,48 @@ export class GameManager {
     }
   }
 
-  /** Arena del Santuario del Desafío: tres oleadas de Coquíls. */
-  private spawnArenaWave(): void {
-    const count = 3 + this.arenaWave; // 3, 4, 5
-    const c = this.level.arenaCenter;
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + this.arenaWave;
-      const x = c.x + Math.cos(a) * 3.6;
-      const z = c.z + Math.sin(a) * 3.2;
-      this.enemies.spawn({
-        pointA: new THREE.Vector3(x, c.y, z),
-        pointB: new THREE.Vector3(c.x + Math.cos(a + 1.5) * 2.2, c.y, c.z + Math.sin(a + 1.5) * 2),
-      });
-    }
-    this.level.setArenaWave(this.arenaWave + 1);
-    this.audio.playCharge();
-    this.ui.showBanner(`Oleada ${this.arenaWave + 1} / 3`, 'auralis', 2000);
-  }
+  /** Desafío de Mael: plataformas temporales contra el reloj (spec §8). */
+  private updateArena(dt: number): void {
+    if (!this.challengeActive) return;
+    this.challengeTimer -= dt;
 
-  private updateArena(): void {
-    if (this.arenaWave < 0 || this.arenaWave >= 3) return;
-    if (this.enemies.aliveCount > this.arenaBaseline) return;
-    this.arenaBaseline = Math.min(this.arenaBaseline, this.enemies.aliveCount);
-    this.arenaWave++;
-    if (this.arenaWave < 3) {
-      this.spawnArenaWave();
-    } else {
+    // ¿Llegó al pedestal flotante a tiempo?
+    if (this.player.position.distanceTo(this.level.challengePedestalPos) < 3) {
+      this.challengeActive = false;
+      this.challengeDone = true;
       this.audio.playPurify();
-      this.ui.say('Elaria', 'Tres oleadas. El santuario reconoce tu valor.');
+      this.ui.say('Elaria', 'Dominio y velocidad. El santuario te corona.');
       this.destellos.spawnVisual('desafio', this.level.arenaDestelloPos);
+      // Lumas raros de recompensa
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
-        this.collectibles.spawnCrystal(this.level.arenaCenter.clone()
-          .add(new THREE.Vector3(Math.cos(a) * 2, 1.2, Math.sin(a) * 2)));
+        this.collectibles.spawnCrystal(this.level.challengePedestalPos.clone()
+          .add(new THREE.Vector3(Math.cos(a) * 2.4, 1, Math.sin(a) * 2.4)));
       }
+      this.ui.setObjective(this.destellos.count >= this.destellos.required && !this.faroDone
+        ? '<b>Activa el Faro del Alba</b>'
+        : `Reúne <b>${Math.max(this.destellos.required - this.destellos.count, 0)} Destello(s)</b> más`);
+      return;
     }
+
+    // Tiempo agotado: las plataformas se desvanecen (se puede reintentar)
+    if (this.challengeTimer <= 0) {
+      this.challengeActive = false;
+      this.level.setChallengeActive(false);
+      this.audio.playHurt();
+      this.ui.showBanner('⏱ Tiempo agotado', 'auralis', 2200);
+      this.ui.say('Oryn', 'Casi… ¡el santuario te deja intentarlo otra vez!');
+      this.triggerCooldowns.set('desafio', 3);
+      return;
+    }
+    this.ui.setObjective(`⏱ Desafío: <b>${Math.ceil(this.challengeTimer)} s</b> — alcanza el pedestal`);
   }
 
   /** Filas de Destellos para pausa/mapa/pantalla final. */
   private destelloRows() {
     const mapPos: Record<string, [number, number]> = {
-      faro: [0, -44], coral: [-36, 4], oryn: [38, -6],
-      quiries: [16, 8], cueva: [-28, -14], desafio: [20, -34],
+      faro: [0, -165], coral: [-85, 80], oryn: [66, -22],
+      quiries: [95, 35], cueva: [-79, -60], desafio: [-55, -95],
     };
     return this.destellos.defs.map((d) => ({
       nombre: d.nombre,
@@ -833,12 +897,15 @@ export class GameManager {
       this.destellos.update(dt, this.player.position);
       this.oryn.update(dt, this.player.position, this.player.facingY);
       this.liora.update(dt, this.player.position, this.destellos.count / this.destellos.required);
-      this.cameraCtrl.update(dt, this.player.position, this.player.velocity);
+      if (!this.debugView) this.cameraCtrl.update(dt, this.player.position, this.player.velocity);
+      this.sun.position.set(this.player.position.x + 60, this.player.position.y + 120, this.player.position.z + 40);
+      this.sun.target.position.copy(this.player.position);
+      this.sun.target.updateMatrixWorld();
       this.elaria.update(dt);
       this.updateInteractions(dt);
       this.updateCave();
       this.updateNotes();
-      this.updateArena();
+      this.updateArena(dt);
       this.storyMoments();
 
       this.quiriTimer -= dt;
@@ -877,7 +944,7 @@ export class GameManager {
   /** Reacciones contextuales al explorar. */
   private storyMoments(): void {
     const p = this.player.position;
-    if (!this.storyFlags.bruteSeen && p.x < -26) {
+    if (!this.storyFlags.bruteSeen && p.x < -48 && p.z > 50) {
       this.storyFlags.bruteSeen = true;
       this.ui.say('Oryn', 'Ese caracol gigante embiste si te acercas… ¡úsalo contra las rocas moradas!', 4500);
     }

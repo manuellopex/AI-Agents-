@@ -100,7 +100,7 @@ export class WaterSurface {
 
           // Detalle fino solo de cerca: lejos alasea en franjas, así que se funde
           float camDist = distance(cameraPosition, vWorld);
-          float detailFade = 1.0 - smoothstep(28.0, 65.0, camDist);
+          float detailFade = 1.0 - smoothstep(45.0, 110.0, camDist);
 
           // Caustics: vivos en la banda media/poca profundidad
           float c1 = wave(vWorld.xz * 0.9 + vec2(uTime * 0.5, uTime * 0.35));
@@ -140,7 +140,7 @@ export class WaterSurface {
       `,
     });
 
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(360, 360, 1, 1), this.material);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1500, 1500, 1, 1), this.material);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = 0.12;
     scene.add(mesh);
