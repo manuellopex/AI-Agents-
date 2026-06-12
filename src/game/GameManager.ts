@@ -244,16 +244,16 @@ export class GameManager {
       {
         // Plano 1: el Faro del Alba, apagado, contra el cielo
         duration: 4.5,
-        camFrom: new THREE.Vector3(26, 30, -76),
-        camTo: new THREE.Vector3(16, 22, -64),
-        lookTo: new THREE.Vector3(0, 14, -44),
+        camFrom: new THREE.Vector3(95, 145, -285),
+        camTo: new THREE.Vector3(55, 122, -240),
+        lookTo: new THREE.Vector3(0, 100, -170),
         dialogue: { speaker: 'Oryn', text: 'Mael… el Faro del Alba está apagado. Eso no puede ser bueno.' },
       },
       {
-        // Plano 2: barrido sobre la isla, de las terrazas al sur
+        // Plano 2: barrido sobre las terrazas de la isla hacia el sur
         duration: 5,
-        camTo: new THREE.Vector3(-26, 16, 4),
-        lookTo: new THREE.Vector3(0, 4, -16),
+        camTo: new THREE.Vector3(-150, 75, 60),
+        lookTo: new THREE.Vector3(0, 28, -40),
         dialogue: { speaker: 'Elaria', text: 'Reúne 3 Destellos de Auralis y devuelve la luz al faro.' },
       },
       {
@@ -353,6 +353,8 @@ export class GameManager {
     );
     this.player.pads = this.level.pads;
     this.player.updrafts = this.level.updrafts;
+    this.player.boxColliders = this.level.boxColliders;
+    this.player.ellipseColliders = this.level.ellipseColliders;
     // Modelo final de Mael (public/models/mael.glb): se enchufa solo
     const maelModel = this.assets.getClone('mael', 1.72);
     if (maelModel) this.player.useGltfModel(maelModel, this.assets.getAnimations('mael'));
@@ -360,6 +362,7 @@ export class GameManager {
     this.oryn.setSecret(this.level.orynZoneCenter, this.level.orynZoneRadius, this.level.moundPos);
     this.liora = new Liora(this.scene, [this.level.checkpoints[0]], this.level.faroPedestalPos);
     this.cameraCtrl = new CameraController(this.container.clientWidth / Math.max(this.container.clientHeight, 1));
+    this.cameraCtrl.colliders = this.level.groundMeshes;
     this.cameraCtrl.snapTo(this.player.position);
     this.cutscene = new CutsceneSystem(this.cameraCtrl.camera, (sp, tx, dur) => this.ui.say(sp, tx, dur));
     this.elaria = new ElariaApparition(this.scene);
@@ -677,7 +680,7 @@ export class GameManager {
     this.faroDone = true;
     this.ui.setObjective('✔ Faro del Alba activado');
     this.ui.setDestellos(this.destellos.count, this.destellos.required, this.destellos.total);
-    const crystalPos = new THREE.Vector3(0, 21.5, -44);
+    const crystalPos = new THREE.Vector3(0, 110.5, -170);
     const pedestal = this.level.faroPedestalPos;
 
     this.startCutscene([
@@ -709,7 +712,7 @@ export class GameManager {
       {
         // Paso 4: el rayo del faro se abre hacia el cielo
         duration: 5,
-        camTo: new THREE.Vector3(12, 26, -60),
+        camTo: new THREE.Vector3(48, 128, -238),
         lookTo: crystalPos,
         dialogue: { speaker: 'Liora', text: '✦' },
         onStart: () => {
@@ -722,8 +725,8 @@ export class GameManager {
       {
         // Pasos 5-6: la luz purifica la isla y abre la siguiente ruta
         duration: 5.5,
-        camTo: new THREE.Vector3(0, 38, 14),
-        lookTo: new THREE.Vector3(0, 6, -18),
+        camTo: new THREE.Vector3(0, 180, 110),
+        lookTo: new THREE.Vector3(0, 30, -60),
         dialogue: { speaker: 'Oryn', text: '¡SÍ! ¡Luz! ¡Somos héroes oficiales de la isla!' },
         onStart: () => {
           this.level.purifyIsland();

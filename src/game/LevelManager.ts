@@ -78,6 +78,10 @@ export class LevelManager {
   readonly pads: BouncePad[] = [];
   readonly triggers: Trigger[] = [];
   readonly updrafts: Updraft[] = [];
+  /** Muros reales (cajas orientadas): edificios, murallas, cueva. */
+  readonly boxColliders: { cx: number; cz: number; hx: number; hz: number; rotY: number; y0: number; y1: number }[] = [];
+  /** Acantilados de las mesas (paredes elípticas verticales). */
+  readonly ellipseColliders: { cx: number; cz: number; rx: number; rz: number; y1: number }[] = [];
   readonly killY = -0.45;
 
   // --- Área 5: Faro del Alba ---
@@ -154,6 +158,12 @@ export class LevelManager {
   private matAuralis = new THREE.MeshStandardMaterial({
     color: 0x6fd8ff, emissive: 0x2090c0, emissiveIntensity: 1.1, roughness: 0.3,
   });
+  private matCliff = new THREE.MeshStandardMaterial({ color: 0xcdb98e, roughness: 0.95 });
+  private mesaTopMat = (() => {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x55b066, roughness: 0.92 });
+    applyCloudShadows(mat, true);
+    return mat;
+  })();
   private terrainMat = (() => {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
     applyCloudShadows(mat, true);
@@ -295,14 +305,33 @@ export class LevelManager {
     if (registerShore) this.shores.push({ x: cx, z: cz, rx, rz });
   }
 
-  /** Las 5 bandas de elevación + la meseta de la Arboleda. */
+  /**
+   * Mesa de pared VERTICAL (estilo plataformero clásico): cima plana
+   * caminable + acantilado infranqueable con colisionador elíptico.
+   * Solo se sube por rampas, escaleras, pads o corrientes de viento.
+   */
+  private addMesa(cx: number, cz: number, rx: number, rz: number, topY: number): void {
+    const h = topY + 2; // baja hasta y −2 (bajo el mar)
+    const geo = new THREE.CylinderGeometry(1, 1.04, 1, 48, 1, false);
+    const mesh = new THREE.Mesh(geo, [this.matCliff, this.mesaTopMat, this.matCliff]);
+    mesh.scale.set(rx, h, rz);
+    mesh.position.set(cx, topY - h / 2, cz);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    this.group.add(mesh);
+    this.groundMeshes.push(mesh);
+    // Pared sólida hasta 5 m bajo el borde (las rampas coronan por encima)
+    this.ellipseColliders.push({ cx, cz, rx: rx + 0.2, rz: rz + 0.2, y1: topY - 5 });
+  }
+
+  /** Isla base esculpida (playas) + 4 mesas + meseta de la Arboleda. */
   private buildTerrain(): void {
-    this.addIsland(0, 0, 155, 205, 2, 0x58b368, 3.1, true);     // banda 1: playa (0-4)
-    this.addIsland(0, -55, 120, 135, 12, 0x4ca65e, 6.4);        // banda 2: acantilados bajos (6-15)
-    this.addIsland(0, -98, 88, 95, 28, 0x58b368, 9.2);          // banda 3: ciudad media (18-38)
-    this.addIsland(0, -140, 58, 60, 58, 0x6aa06a, 12.7);        // banda 4: distrito alto (45-70)
-    this.addIsland(0, -168, 32, 27, 70, 0x7aa886, 15.1);        // banda 5: base del faro (70)
-    this.addIsland(95, 35, 48, 40, 18, 0x3fae5e, 18.9);         // meseta de la Arboleda (y18)
+    this.addIsland(0, 0, 155, 205, 2, 0x58b368, 3.1, true);  // playa (0-4)
+    this.addMesa(0, -55, 120, 135, 12);                      // acantilados bajos y12
+    this.addMesa(0, -98, 70, 70, 28);                        // ciudad media y28
+    this.addMesa(0, -140, 50, 42, 58);                       // distrito alto y58
+    this.addMesa(0, -168, 26, 18, 70);                       // base del faro y70
+    this.addMesa(95, 35, 44, 36, 18);                        // meseta de la Arboleda y18
   }
 
   private buildWater(): void {
@@ -313,34 +342,32 @@ export class LevelManager {
   // FASE 3 — RUTAS PRINCIPALES, RAMPAS, PADS Y ATAJOS
   // ==================================================================
   private buildMainRoutes(): void {
-    // R1: playa → distrito bajo (rampa principal 6 m, pendiente suave)
-    this.addRamp(0, 2, 82, 0, 12, 46, 6);
-    // R2: distrito bajo → ciudad media (rampa 6 m con descansillo)
-    this.addRamp(0, 12, -2, 0, 20, -18, 6);
-    this.addPlatform(0, 20, -22, 8, 1, 8, this.matStone);
-    this.addRamp(0, 20, -26, 0, 28, -40, 6);
-    // R4: distrito alto → base del faro (rampas ceremoniales en zigzag)
-    this.addRamp(-6, 58, -132, -6, 64, -146, 5);
-    this.addPlatform(-2, 64, -149, 9, 1, 7, this.matStone);
-    this.addRamp(2, 64, -148, 2, 70, -158, 5);
-    // Acceso a la Arboleda desde la playa (rampa este)
-    this.addRamp(36, 2, 42, 62, 18, 42, 5);
-    // Sendero de Oryn: subida final a la ciudad media (este)
-    this.addRamp(52, 12, -42, 42, 28, -66, 5);
+    // R1: playa → mesa baja (corona el borde sur de la mesa y12)
+    this.addRamp(0, 2, 96, 0, 12.3, 72, 6);
+    // R2: mesa baja → ciudad media (corona el borde sur de la mesa y28)
+    this.addRamp(0, 12.2, 2, 0, 28.3, -36, 6);
+    // R4: distrito alto → base del faro (zigzag ceremonial)
+    this.addRamp(-6, 58.2, -136, -6, 64, -144, 5);
+    this.addPlatform(-2, 64, -147, 9, 1, 7, this.matStone);
+    this.addRamp(2, 64, -146, 2, 70.4, -156, 5);
+    // Acceso a la Arboleda desde la playa (corona el borde oeste)
+    this.addRamp(22, 2, 40, 54, 18.3, 40, 5);
+    // Sendero de Oryn → ciudad media (corona el borde este)
+    this.addRamp(54, 12.2, -38, 40, 28.3, -66, 5);
 
-    // ATAJOS con bounce pads (potencias calculadas para g=28)
-    this.addPad(16, 2, 60, 26);    // playa → distrito bajo directo
-    this.addPad(20, 12, -34, 32);  // distrito bajo → ciudad media (mirador)
-    this.addPad(-70, 2, 60, 26);   // playa del Coral → acantilado bajo oeste
+    // ATAJOS con bounce pads (potencias para g=28)
+    this.addPad(16, 2, 86, 26);    // playa → mesa baja directo
+    this.addPad(24, 12, -20, 31);  // mesa baja → ciudad media
+    this.addPad(-70, 2, 60, 26);   // playa del Coral → mesa baja oeste
     this.addPad(80, 18, 10, 14);   // arboleda: brinco panorámico
 
     // Caminos de piedra marcando la ruta principal
     this.addRoad(0, 130, 0, 86, 2.05);
-    this.addRoad(0, 44, 0, 0, 12.05);
-    this.addRoad(0, -42, 0, -92, 28.05);
-    this.addRoad(0, -120, 0, -146, 58.05);
+    this.addRoad(0, 60, 0, 6, 12.05);
+    this.addRoad(0, -42, 0, -82, 28.05);
+    this.addRoad(0, -104, 0, -132, 58.05);
     this.addRoadX(-6, -68, 70, 2.05);   // hub → playa del Coral
-    this.addRoadX(8, 34, 50, 2.05);     // hub → rampa de la Arboleda
+    this.addRoadX(8, 20, 40, 2.05);     // hub → rampa de la Arboleda
   }
 
   // ==================================================================
@@ -408,25 +435,26 @@ export class LevelManager {
   // ==================================================================
   private buildCaveEntrance(): void {
     // Hero waterfall (26 m) cayendo del borde oeste de la ciudad media
+    // Cae de la cima de la ciudad media (y28) a la mesa baja (y12): 16 m
     const fall = new THREE.Mesh(
-      new THREE.PlaneGeometry(7, 27),
+      new THREE.PlaneGeometry(7, 17),
       new THREE.MeshBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.65, side: THREE.DoubleSide }),
     );
-    fall.position.set(-79, 14.5, -60);
+    fall.position.set(-58.5, 20.5, -60);
     fall.rotation.y = Math.PI / 2;
     this.group.add(fall);
-    const foam = new THREE.Mesh(new THREE.CircleGeometry(5.5, 18),
+    const foam = new THREE.Mesh(new THREE.CircleGeometry(5, 18),
       new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 0.55 }));
     foam.rotation.x = -Math.PI / 2;
-    foam.position.set(-83, 2.25, -60);
+    foam.position.set(-61, 12.25, -60);
     this.group.add(foam);
     // Puerta oculta tras la cascada
     const door = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.4, 14),
       new THREE.MeshStandardMaterial({ color: 0x2a3a52, emissive: 0x102040, emissiveIntensity: 0.5 }));
     door.rotation.z = Math.PI / 2;
-    door.position.set(-77.5, 4, -60);
+    door.position.set(-57.2, 14, -60);
     this.group.add(door);
-    this.triggers.push({ id: 'cueva', position: new THREE.Vector3(-79, 2.5, -60), radius: 5 });
+    this.triggers.push({ id: 'cueva', position: new THREE.Vector3(-59, 12.5, -60), radius: 5 });
   }
 
   private buildCaveInterior(): void {
@@ -446,6 +474,7 @@ export class LevelManager {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 13, d), wallMat);
       wall.position.set(x, 13.5, z);
       this.group.add(wall);
+      this.boxColliders.push({ cx: x, cz: z, hx: w / 2, hz: d / 2, rotY: 0, y0: 6, y1: 20 });
     }
     const ceiling = new THREE.Mesh(new THREE.BoxGeometry(58, 1, 38), wallMat);
     ceiling.position.set(414, 20.5, 0);
@@ -507,37 +536,37 @@ export class LevelManager {
   // ÁREA 4 — RUTA VERTICAL DEL FARO (28 → 70 m, recorrido ≈ 150 m)
   // ==================================================================
   private buildVerticalRoute(): void {
+    // Arranque: escalera corta desde la plaza norte de la ciudad media
+    this.addStairs(0, 28, -84, 0, 31, -90, 4.5);
+    this.addPlatform(0, 31, -92, 5, 1, 5);
     // Tramo 1: plataformas amplias 5×5 con saltos de 3-4.5 m
-    this.addPlatform(8, 31, -100, 5, 1, 5);
-    this.addPlatform(15, 34, -107, 5, 1, 5);
-    this.addPlatform(10, 37, -114, 4, 1, 4);
+    // (todas FUERA del muro de la mesa alta, que pasa por z ≈ −98)
+    this.addPlatform(9, 34, -94, 5, 1, 5);
+    this.addPlatform(16, 37, -90, 5, 1, 5);
     // Terraza de descanso 1 + CHECKPOINT intermedio
-    this.addPlatform(0, 40, -120, 9, 1.2, 9, this.matStone);
-    this.checkpoints.push(new THREE.Vector3(0, 41, -120));
-    // Tramo 2: ledges (mantle 1.2 m) + rampa
-    this.addPlatform(-8, 41.2, -124, 4, 1, 4);
-    this.addPlatform(-14, 44, -128, 4.5, 1, 4.5);
-    this.addRamp(-14, 44, -131, -10, 48, -138, 4);
+    this.addPlatform(8, 40, -84, 9, 1.2, 9, this.matStone);
+    this.checkpoints.push(new THREE.Vector3(8, 41, -84));
+    // Tramo 2: ledges (mantle 1.2 m)
+    this.addPlatform(-1, 41.2, -88, 4, 1, 4);
+    this.addPlatform(-9, 44, -92, 4.5, 1, 4.5);
     // Terraza de descanso 2 con bounce pad
-    this.addPlatform(-4, 48, -140, 8, 1.2, 8, this.matStone);
-    this.addPad(-4, 48.6, -140, 20);
-    // Tramo 3: corriente de viento que eleva al distrito alto
-    this.updrafts.push({ x: 6, z: -134, r: 3.2, topY: 59, lift: 26 });
+    this.addPlatform(-16, 47, -86, 8, 1.2, 8, this.matStone);
+    this.addPad(-16, 47.6, -86, 18);
+    // Tramo 3: corrientes de viento que coronan el distrito alto
+    this.addPlatform(-8, 50, -94, 4, 1, 4); // base de la corriente 1
+    this.updrafts.push({ x: -8, z: -94, r: 3.2, topY: 59.5, lift: 26 });
     const windPillar = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.8, 3.4, 18, 14, 1, true),
+      new THREE.CylinderGeometry(2.8, 3.4, 16, 14, 1, true),
       new THREE.MeshBasicMaterial({ color: 0xcdf6ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide }),
     );
-    windPillar.position.set(6, 50, -134);
+    windPillar.position.set(-8, 53, -94);
     this.group.add(windPillar);
-    this.addPlatform(6, 41, -134, 4, 1, 4); // base de la corriente
-    // Segunda corriente opcional (atajo desde la terraza 2)
-    this.updrafts.push({ x: -16, z: -146, r: 2.6, topY: 60, lift: 24 });
+    this.updrafts.push({ x: 8, z: -96, r: 2.8, topY: 59.5, lift: 24 });
     const windPillar2 = windPillar.clone();
-    windPillar2.position.set(-16, 52, -146);
-    windPillar2.scale.set(0.85, 1, 0.85);
+    windPillar2.position.set(8, 53, -96);
+    windPillar2.scale.set(0.9, 1, 0.9);
     this.group.add(windPillar2);
-
-    // Lumas guiando toda la ruta (se colocan en placeLumas)
+    this.addPlatform(8, 44, -96, 4, 1, 4); // base de la corriente 2
   }
 
   // ==================================================================
@@ -755,32 +784,35 @@ export class LevelManager {
 
   /** Lower Terrace District (y12): casas 6-9 m, calles, muros, plaza. */
   private buildLowerDistrict(): void {
-    this.checkpoints.push(new THREE.Vector3(0, 12, -10));
+    this.checkpoints.push(new THREE.Vector3(0, 12, 10));
     const houses: [number, number, number, number, number][] = [
-      // x, z, ancho, alto, rotY
-      [-24, -6, 7, 7, 0.3], [-30, -24, 8, 7.5, 0.9], [24, -10, 7.5, 6.5, -0.4],
-      [32, -26, 6.5, 8, -1.1], [-14, -32, 9, 8.5, 0.1], [16, -34, 7, 7, 0.2],
+      // x, z, ancho, alto, rotY (todo en la cima plana de la mesa y12)
+      [-24, 18, 7, 7, 0.3], [-32, 2, 8, 7.5, 0.9], [24, 16, 7.5, 6.5, -0.4],
+      [34, 0, 6.5, 8, -1.1], [-16, -8, 9, 8.5, 0.1], [16, -10, 7, 7, 0.2],
     ];
     for (const [x, z, w, h, rot] of houses) {
       this.addHouseScaled(x, 12, z, w, h, [0xf2917e, 0x8fd6cf, 0xf5e6c4][Math.floor(Math.random() * 3)], rot);
     }
-    // Calles y muros bajos
-    this.addRoadX(-26, 26, -16, 12.05);
-    for (const [x, z, len, rot] of [[-38, -14, 16, 0], [38, -16, 14, 0], [0, -38, 30, Math.PI / 2]] as const) {
+    // Calles y muros bajos (con colisión real)
+    this.addRoadX(-26, 26, 6, 12.05);
+    for (const [x, z, len, rot] of [[-40, 8, 16, 0], [40, 6, 14, 0], [0, 24, 30, Math.PI / 2]] as const) {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 1.1, len), this.matStoneDark);
       wall.position.set(x, 12.55, z);
       wall.rotation.y = rot;
       this.group.add(wall);
+      this.boxColliders.push({
+        cx: x, cz: z, hx: rot === 0 ? 0.5 : len / 2, hz: rot === 0 ? len / 2 : 0.5,
+        rotY: 0, y0: 12, y1: 13.1,
+      });
     }
-    // Plaza del mercado con toldos
+    // Plaza del mercado
     const market = new THREE.Mesh(new THREE.CylinderGeometry(6, 6.4, 0.4, 18), this.matStone);
-    market.position.set(14, 12.05, -22);
+    market.position.set(14, 12.05, 4);
     this.group.add(market);
     this.groundMeshes.push(market);
-    // Escaleras urbanas (huella/contrahuella reales)
-    this.addStairs(-10, 12, -38, -10, 16, -46, 3.5);
-    this.addStairs(22, 12, -2, 22, 14.4, 6, 2.5);
-    this.addPlatform(-10, 16, -50, 8, 1, 8, this.matStone); // mirador bajo
+    // Escaleras urbanas + mirador a la playa
+    this.addStairs(22, 12, 12, 22, 14.4, 20, 2.5);
+    this.addPlatform(22, 14.4, 24, 7, 1, 7, this.matStone);
   }
 
   /** Mid Terrace District (y28): edificios 10-16 m, balcones, puentes, mirador. */
@@ -807,13 +839,14 @@ export class LevelManager {
 
     // Terraza Mirador (12×10) asomada al mar este, con barandilla
     const mirador = new THREE.Mesh(new THREE.BoxGeometry(12, 0.8, 10), this.matStone);
-    mirador.position.set(58, 28, -60);
+    mirador.position.set(56, 28, -74);
     this.group.add(mirador);
     this.groundMeshes.push(mirador);
     const rail = new THREE.Mesh(new THREE.BoxGeometry(12, 1, 0.3), this.matStoneDark);
-    rail.position.set(58, 29, -65);
+    rail.position.set(56, 29, -79);
     this.group.add(rail);
-    this.addRoadX(36, 52, -60, 28.05);
+    this.boxColliders.push({ cx: 56, cz: -79, hx: 6, hz: 0.3, rotY: 0, y0: 28, y1: 29.6 });
+    this.addRoadX(34, 50, -74, 28.05);
 
     // Puente corto sobre el canal ornamental
     const canal = new THREE.Mesh(new THREE.BoxGeometry(40, 0.4, 4),
@@ -826,8 +859,7 @@ export class LevelManager {
       this.group.add(bridge);
       this.groundMeshes.push(bridge);
     }
-    // Escaleras amplias hacia el distrito alto (inicio de la Ruta Vertical)
-    this.addStairs(0, 28, -94, 0, 31, -100, 4.5);
+
   }
 
   /** Upper Sacred District (y58): monumental, ruinas, templos, camino ceremonial. */
@@ -860,7 +892,7 @@ export class LevelManager {
       gltfHouse.position.set(x, yGround + gltfHouse.position.y, z);
       gltfHouse.rotation.y = rotY;
       this.group.add(gltfHouse);
-      this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: w * 0.55 });
+      this.boxColliders.push({ cx: x, cz: z, hx: w / 2, hz: w * 0.43, rotY, y0: yGround, y1: yGround + h });
       return;
     }
     const house = new THREE.Group();
@@ -889,7 +921,8 @@ export class LevelManager {
     house.position.set(x, yGround, z);
     house.rotation.y = rotY;
     this.group.add(house);
-    this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: w * 0.55 });
+    // Colisión de caja orientada: las paredes son paredes
+    this.boxColliders.push({ cx: x, cz: z, hx: w / 2, hz: d / 2, rotY, y0: yGround, y1: yGround + h });
   }
 
   /** Edificio mediano con balcón (Mid District). */
@@ -920,7 +953,7 @@ export class LevelManager {
     building.position.set(x, yGround, z);
     building.rotation.y = rotY;
     this.group.add(building);
-    this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: Math.max(w, d) * 0.55 });
+    this.boxColliders.push({ cx: x, cz: z, hx: w / 2, hz: d / 2, rotY, y0: yGround, y1: yGround + h });
   }
 
   /** Templo pequeño monumental (Upper District). */
@@ -988,8 +1021,8 @@ export class LevelManager {
       [78, 28, 15],          // 1. copa de un árbol gigante de la Arboleda
       [70, 13.6, -12],       // 2. mirador del Sendero de Oryn
       [410, 10.6, 12],       // 3. dentro de la Cueva Azul
-      [-74, 13, -60],        // 4. sobre la cascada (borde de la ciudad media)
-      [-4, 49.8, -140],      // 5. terraza alta de la Ruta Vertical
+      [-56, 29.5, -60],      // 4. sobre la cascada (borde de la ciudad media)
+      [-16, 49.4, -86],      // 5. terraza alta de la Ruta Vertical
     ];
     for (const [x, y, z] of spots) {
       const note = new THREE.Group();
@@ -1201,7 +1234,7 @@ export class LevelManager {
   private buildCrates(): void {
     this.addCrate(-20, 2, 134);
     this.addCrate(-100, 2, 62);
-    this.addCrate(48, 12, -26);
+    this.addCrate(44, 12, 14);
     this.addCrate(-30, 28, -76);
     this.addCrate(70, 12, -14);
     this.addCrate(-10, 58, -120);
@@ -1253,13 +1286,13 @@ export class LevelManager {
     this.lumaLine(0, 3, 156, 0, 3, 90, 12);
     this.lumaLine(0, 4, 80, 0, 13, 48, 7);
     this.lumaLine(0, 13, 40, 0, 13, 2, 8);
-    this.lumaLine(0, 21, -18, 0, 29, -44, 6);
-    this.lumaLine(0, 29, -50, 0, 29, -90, 8);
+    this.lumaLine(0, 14, 0, 0, 29, -34, 7);
+    this.lumaLine(0, 29, -42, 0, 29, -80, 8);
     // RUTA VERTICAL: cada plataforma + corrientes
-    add(8, 33, -100); add(15, 36, -107); add(10, 39, -114); add(0, 42.5, -120);
-    add(-8, 43.5, -124); add(-14, 46, -128); add(-4, 50.5, -140);
-    this.lumaLine(6, 44, -134, 6, 57, -134, 5);  // dentro del viento
-    this.lumaLine(0, 60, -125, 0, 60, -146, 5);
+    add(0, 33, -92); add(9, 36, -94); add(16, 39, -90); add(8, 42.5, -84);
+    add(-1, 43.5, -88); add(-9, 46, -92); add(-16, 49.5, -86);
+    this.lumaLine(-8, 53, -94, -8, 58.5, -94, 4);  // dentro del viento
+    this.lumaLine(0, 60, -104, 0, 60, -132, 5);
     // FARO: hélice + galería
     add(9, 75, -163); add(13, 78.5, -170); add(9, 82, -177); add(0, 85.5, -180);
     add(-9, 89, -177); add(-13, 92.5, -170); add(-9, 96, -163); add(0, 99.5, -160);
@@ -1281,13 +1314,13 @@ export class LevelManager {
     this.lumaLine(398, 10.4, -8, 410, 10.4, 10, 6);
     this.lumaRing(432, 10.6, 6, 4, 6);
     // CIUDAD: plazas y mirador
-    this.lumaRing(14, 13.4, -22, 5, 6);
+    this.lumaRing(14, 13.4, 4, 5, 6);
     this.lumaRing(0, 29.5, -72, 6.5, 8);
-    add(58, 29.6, -60); add(-10, 17.5, -50);
+    add(56, 29.6, -74); add(22, 15.8, 24);
     // SECRETOS: orillas y rincones
     this.lumaRing(0, 1, 40, 148, 14);
     add(-140, 2.6, 30); add(142, 2.6, -20); add(0, 2.4, -198); add(120, 2.4, 90);
-    add(-74, 14.5, -60); // sobre la cascada
+    add(-56, 30.5, -60); // sobre la cascada
   }
 
   private placeEnemies(): void {
@@ -1303,8 +1336,8 @@ export class LevelManager {
     def(56, 12, -6, 60, 12, -22);
     def(52, 12, -32, 62, 12, -36);
     // Distrito bajo (2)
-    def(-22, 12, -18, -2, 12, -22);
-    def(20, 12, -30, 34, 12, -20);
+    def(-22, 12, 12, -2, 12, 8);
+    def(20, 12, -4, 34, 12, 6);
     // Ciudad media (3)
     def(-20, 28, -64, -8, 28, -78);
     def(18, 28, -88, 30, 28, -72);

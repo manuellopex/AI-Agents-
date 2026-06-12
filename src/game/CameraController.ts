@@ -16,6 +16,9 @@ export class CameraController {
 
   /** Ángulo horizontal actual de la cámara (0 = mirando hacia -Z). */
   yaw = 0;
+  /** Geometría que la cámara no debe atravesar (la asigna el GameManager). */
+  colliders: THREE.Object3D[] = [];
+  private occluderRay = new THREE.Raycaster();
 
   /** Altura y distancia respecto al jugador. */
   private readonly height = 8.6;
@@ -88,7 +91,21 @@ export class CameraController {
 
     this.currentPos.lerp(desiredPos, 1 - Math.exp(-this.followLerp * dt));
     this.currentLook.lerp(desiredLook, 1 - Math.exp(-this.lookLerp * dt));
-    this.camera.position.copy(this.currentPos);
+
+    // Oclusión: si un muro/acantilado se interpone, acercar la cámara
+    let camPos = this.currentPos;
+    if (this.colliders.length > 0) {
+      const eye = target.clone().add(new THREE.Vector3(0, 1.6, 0));
+      const toCam = this.currentPos.clone().sub(eye);
+      const dist = toCam.length();
+      this.occluderRay.set(eye, toCam.normalize());
+      this.occluderRay.far = dist;
+      const hit = this.occluderRay.intersectObjects(this.colliders, false)[0];
+      if (hit && hit.distance < dist - 0.5) {
+        camPos = eye.clone().addScaledVector(toCam, Math.max(hit.distance - 0.6, 1.5));
+      }
+    }
+    this.camera.position.copy(camPos);
     this.camera.lookAt(this.currentLook);
 
     // FOV dinámico (LDD): 62 quieto → 70 a toda velocidad (sensación de carrera)

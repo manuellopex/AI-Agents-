@@ -77,6 +77,18 @@ Arboleda 11–16 m (copa 8–13 m) · hierba instanciada 0.35–0.6 m
 - Checkpoints: 11 (spawn, Coral, Arboleda, Sendero, Bajo, Medio,
   terraza Ruta Vertical, Alto, Atrio, Desafío, Cueva)
 
+## Colisión (v2 — terrazas tipo mesa)
+
+- Terrazas = **mesas de pared vertical** (cilindros elípticos): cima
+  caminable, acantilado infranqueable con **colisionador elíptico**
+  (sólido hasta 5 m bajo el borde: las rampas coronan por encima y los
+  muros de 10+ m no se pueden escalar: doble salto+mantle = 6.4 m).
+- **Cajas orientadas (OBB)** para paredes reales: casas, edificios,
+  murallas bajas, barandillas y los 4 muros de la Cueva Azul.
+- Cilindros para props (árboles, rocas, columnas, torre del faro).
+- **Cámara con oclusión**: raycast del jugador a la cámara; si un
+  acantilado/estructura se interpone, la cámara se acerca.
+
 ## Validación de gameplay (lista FASE 5)
 
 - [x] Mannequins: Mael 1.72 / puertas 2.4-3.2 / pisos ~3 m

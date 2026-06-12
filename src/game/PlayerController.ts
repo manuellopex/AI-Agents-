@@ -38,6 +38,10 @@ export class PlayerController {
   pads: { position: THREE.Vector3; power: number }[] = [];
   /** Corrientes de viento ascendentes: {x, z, radio, topY, empuje}. */
   updrafts: { x: number; z: number; r: number; topY: number; lift: number }[] = [];
+  /** Muros reales: cajas orientadas (edificios, murallas, cueva). */
+  boxColliders: { cx: number; cz: number; hx: number; hz: number; rotY: number; y0: number; y1: number }[] = [];
+  /** Acantilados de las mesas: paredes elípticas infranqueables. */
+  ellipseColliders: { cx: number; cz: number; rx: number; rz: number; y1: number }[] = [];
   /** Yaw de la cámara: el joystick se interpreta relativo a ella. */
   cameraYaw = 0;
   /** true mientras cae en ground pound (golpea al aterrizar). */
@@ -172,6 +176,8 @@ export class PlayerController {
     this.updateJump(dt);
     this.applyPhysics(dt);
     this.resolveObstacles();
+    this.resolveBoxes();
+    this.resolveEllipses();
     this.updateAttack(dt);
     this.updateCheckpoints();
     this.updateVisuals(dt);
@@ -297,6 +303,47 @@ export class PlayerController {
           this.group.position.z -= this.velocity.z * dt;
         }
       }
+    }
+  }
+
+  /** Colisión contra muros reales: cajas orientadas (XZ). */
+  private resolveBoxes(): void {
+    const p = this.group.position;
+    for (const b of this.boxColliders) {
+      if (p.y < b.y0 || p.y > b.y1) continue;
+      // A espacio local de la caja
+      const cos = Math.cos(-b.rotY);
+      const sin = Math.sin(-b.rotY);
+      const dx = p.x - b.cx;
+      const dz = p.z - b.cz;
+      const lx = dx * cos - dz * sin;
+      const lz = dx * sin + dz * cos;
+      const ox = b.hx + this.playerRadius - Math.abs(lx);
+      const oz = b.hz + this.playerRadius - Math.abs(lz);
+      if (ox <= 0 || oz <= 0) continue; // fuera
+      // Empujar por el eje de menor penetración
+      let px = 0, pz = 0;
+      if (ox < oz) px = ox * Math.sign(lx || 1);
+      else pz = oz * Math.sign(lz || 1);
+      const wc = Math.cos(b.rotY);
+      const ws = Math.sin(b.rotY);
+      p.x += px * wc - pz * ws;
+      p.z += px * ws + pz * wc;
+    }
+  }
+
+  /** Acantilados de mesa: pared elíptica sólida hasta cerca del borde. */
+  private resolveEllipses(): void {
+    const p = this.group.position;
+    for (const e of this.ellipseColliders) {
+      if (p.y > e.y1) continue; // por encima del muro (rampa coronando, cima)
+      const nx = (p.x - e.cx) / (e.rx + this.playerRadius);
+      const nz = (p.z - e.cz) / (e.rz + this.playerRadius);
+      const d = Math.hypot(nx, nz);
+      if (d >= 1 || d < 1e-4) continue; // fuera de la mesa, o centro exacto
+      const scale = 1 / d;
+      p.x = e.cx + nx * scale * (e.rx + this.playerRadius);
+      p.z = e.cz + nz * scale * (e.rz + this.playerRadius);
     }
   }
 

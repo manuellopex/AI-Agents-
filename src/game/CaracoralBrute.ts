@@ -24,7 +24,7 @@ export class CaracoralBrute {
   state: BruteState = 'idle';
 
   /** Radio de contacto que daña al jugador. */
-  readonly touchRadius = 1.5;
+  readonly touchRadius = 2.4;
 
   onPlayerHit: ((position: THREE.Vector3) => void) | null = null;
   onRockBroken: ((remaining: number) => void) | null = null;
@@ -52,6 +52,7 @@ export class CaracoralBrute {
     this.rocks = rocks;
     this.bounds = bounds;
     this.buildBody();
+    this.group.scale.setScalar(1.8); // arena de 85×50: el bruto impone
     this.group.position.copy(position);
     scene.add(this.group);
   }
@@ -138,7 +139,7 @@ export class CaracoralBrute {
           this.group.rotation.y += this.shortestDelta(angle) * Math.min(2 * dt, 1);
         }
         const inBounds = this.contains(playerPosition);
-        if (inBounds && playerDist < 9 && this.cooldown <= 0) {
+        if (inBounds && playerDist < 16 && this.cooldown <= 0) {
           this.state = 'telegraph';
           this.stateTimer = 0.8;
           this.chargeDir.copy(toPlayer).normalize();
@@ -152,19 +153,19 @@ export class CaracoralBrute {
         this.stateTimer -= dt;
         if (this.stateTimer <= 0) {
           this.state = 'charge';
-          this.stateTimer = 1.6;
+          this.stateTimer = 2.4;
           this.onChargeStart?.();
         }
         break;
       }
       case 'charge': {
-        this.group.position.addScaledVector(this.chargeDir, 11 * dt);
+        this.group.position.addScaledVector(this.chargeDir, 15 * dt);
         this.stateTimer -= dt;
 
         // ¿Golpeó una roca corrupta? → la rompe (¡así se purifica la zona!)
         for (const rock of this.rocks) {
           if (rock.broken) continue;
-          if (this.group.position.distanceTo(rock.position) < 1.7) {
+          if (this.group.position.distanceTo(rock.position) < 3.6) {
             this.breakRock(rock);
             this.stun();
             return;
