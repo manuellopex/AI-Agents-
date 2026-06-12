@@ -23,6 +23,17 @@ const GLASS =
   'backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);' +
   'box-shadow:0 4px 14px rgba(0,10,20,.3);';
 
+/** Sprite del kit UI oficial (public/ui/kit), con basePath de Pages. */
+const kitUrl = (name: string): string => {
+  const path = window.location.pathname;
+  const idx = path.indexOf('/game');
+  return `${idx > 0 ? path.slice(0, idx) : ''}/ui/kit/${name}.png`;
+};
+
+/** Icono en línea del kit para usar dentro de innerHTML. */
+const kitIcon = (name: string, height: number, dy = -3): string =>
+  `<img src="${kitUrl(name)}" style="height:${height}px;vertical-align:${dy}px;" alt="">`;
+
 const SPEAKER_COLORS: Record<Speaker, string> = {
   Oryn: '#7de8c3',
   Mael: '#2aa6a0',
@@ -112,7 +123,8 @@ export class UIManager {
       'position:absolute;top:14px;left:14px;display:flex;gap:6px;font-size:27px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4));';
     for (let i = 0; i < 3; i++) {
       const heart = document.createElement('span');
-      heart.textContent = '❤️';
+      heart.style.cssText =
+        `width:27px;height:26px;display:inline-block;background:url("${kitUrl('heart')}") center/contain no-repeat;`;
       this.heartsBox.appendChild(heart);
       this.hearts.push(heart);
     }
@@ -124,7 +136,7 @@ export class UIManager {
     this.destelloCounter.style.cssText =
       `position:absolute;top:54px;left:14px;color:${COLOR.gold};font-weight:800;font-size:17px;${GLASS}` +
       `border-color:rgba(246,192,74,.65);padding:5px 14px;border-radius:18px;`;
-    this.destelloCounter.textContent = '⭐ 0/3';
+    this.destelloCounter.innerHTML = `${kitIcon('destello', 19, -4)} 0/3`;
     this.root.appendChild(this.destelloCounter);
     this.hudGroup.push(this.destelloCounter);
 
@@ -133,7 +145,7 @@ export class UIManager {
     this.lumaCounter.style.cssText =
       `position:absolute;top:94px;left:14px;color:${COLOR.cream};font-weight:700;font-size:14px;${GLASS}` +
       'padding:4px 12px;border-radius:16px;';
-    this.lumaCounter.textContent = '🔹 0';
+    this.lumaCounter.innerHTML = `${kitIcon('luma', 16)} 0`;
     this.root.appendChild(this.lumaCounter);
     this.hudGroup.push(this.lumaCounter);
 
@@ -162,12 +174,12 @@ export class UIManager {
       'opacity:0;transition:opacity .3s, transform .3s;pointer-events:none;';
     this.root.appendChild(this.banner);
 
-    // Pausa: pequeña, lejos de los controles táctiles
+    // Pausa: sprite del kit, pequeña y lejos de los controles táctiles
     const pauseBtn = document.createElement('div');
-    pauseBtn.textContent = '⏸';
     pauseBtn.style.cssText =
-      `position:absolute;top:12px;right:14px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;` +
-      `justify-content:center;font-size:20px;color:${COLOR.cream};${GLASS}pointer-events:auto;`;
+      `position:absolute;top:12px;right:14px;width:46px;height:46px;` +
+      `background:url("${kitUrl('btn-pause')}") center/contain no-repeat;` +
+      'filter:drop-shadow(0 3px 8px rgba(0,20,40,.35));pointer-events:auto;';
     pauseBtn.addEventListener('pointerdown', () => this.onPause?.());
     this.root.appendChild(pauseBtn);
     this.hudGroup.push(pauseBtn);
@@ -246,14 +258,14 @@ export class UIManager {
   }
 
   setLumas(amount: number): void {
-    this.lumaCounter.textContent = `🔹 ${amount}`;
+    this.lumaCounter.innerHTML = `${kitIcon('luma', 16)} ${amount}`;
   }
 
   /** Muestra el progreso hacia el requisito (2/3); tras el faro, sobre 6. */
   setDestellos(count: number, required: number, total?: number): void {
-    this.destelloCounter.textContent = total
-      ? `⭐ ${count}/${total}`
-      : `⭐ ${Math.min(count, required)}/${required}`;
+    this.destelloCounter.innerHTML = total
+      ? `${kitIcon('destello', 19, -4)} ${count}/${total}`
+      : `${kitIcon('destello', 19, -4)} ${Math.min(count, required)}/${required}`;
   }
 
   setObjective(html: string): void {
@@ -279,8 +291,9 @@ export class UIManager {
   setStartReady(ready: boolean): void {
     this.startReady = ready;
     if (this.playBtn) {
-      this.playBtn.textContent = ready ? '▶  Jugar' : 'Cargando…';
-      this.playBtn.style.opacity = ready ? '1' : '0.6';
+      // El sprite ya dice JUGAR; el texto solo se muestra mientras carga
+      this.playBtn.textContent = ready ? '' : 'Cargando…';
+      this.playBtn.style.opacity = ready ? '1' : '0.65';
     }
   }
 
@@ -387,13 +400,15 @@ export class UIManager {
       'background:linear-gradient(180deg, transparent, rgba(4,16,24,.88));';
     this.overlay.appendChild(gradient);
 
+    // Botón JUGAR del kit oficial (texto horneado en el sprite)
     const playBtn = document.createElement('button');
-    playBtn.textContent = this.startReady ? '▶  Jugar' : 'Cargando…';
+    playBtn.textContent = this.startReady ? '' : 'Cargando…';
     playBtn.style.cssText =
-      'position:relative;pointer-events:auto;font:800 21px system-ui;color:#3a2a00;' +
-      `background:linear-gradient(180deg,#ffd97a,${COLOR.gold});border:none;border-radius:18px;` +
-      'padding:16px 64px;box-shadow:0 5px 0 #b8862a, 0 10px 30px rgba(0,0,0,.45);letter-spacing:1px;' +
-      (this.startReady ? '' : 'opacity:.6;');
+      'position:relative;pointer-events:auto;width:248px;height:70px;border:none;' +
+      `background:transparent url("${kitUrl('btn-jugar')}") center/contain no-repeat;` +
+      `color:${COLOR.cream};font:700 15px system-ui;letter-spacing:1px;text-shadow:0 2px 5px rgba(0,0,0,.7);` +
+      'filter:drop-shadow(0 8px 22px rgba(0,0,0,.5));' +
+      (this.startReady ? '' : 'opacity:.65;');
     playBtn.addEventListener('pointerdown', () => {
       if (this.startReady) this.onStart?.();
     });
@@ -413,7 +428,7 @@ export class UIManager {
   /** Pausa con resumen de progreso, misiones y mini-mapa (guía §10-11). */
   showPauseScreen(rows: DestelloRow[], lumas: number, playerX: number, playerZ: number): void {
     const missions = rows.map((r) => {
-      const icon = r.estado === 'completado' ? '⭐' : r.estado === 'pendiente' ? '◇' : '🔒';
+      const icon = r.estado === 'completado' ? kitIcon('destello', 14, -2) : r.estado === 'pendiente' ? '◇' : '🔒';
       const color = r.estado === 'completado' ? COLOR.gold : r.estado === 'pendiente' ? '#9fd8e8' : '#6a7a88';
       return `<div style="color:${color};font-size:13px;line-height:1.7;text-align:left;">${icon} ${r.nombre}
         <span style="opacity:.65;font-size:11px;"> · ${r.tipo}</span></div>`;
@@ -425,7 +440,7 @@ export class UIManager {
          <div style="${GLASS}border-radius:14px;padding:12px 16px;max-width:240px;">
            <div style="font-size:12px;letter-spacing:2px;color:#9fd8e8;margin-bottom:6px;">MISIONES</div>
            ${missions}
-           <div style="margin-top:8px;color:${COLOR.cream};font-size:13px;">🔹 Lumas: <b>${lumas}</b></div>
+           <div style="margin-top:8px;color:${COLOR.cream};font-size:13px;">${kitIcon('luma', 14, -2)} Lumas: <b>${lumas}</b></div>
          </div>
          ${this.buildMap(rows, playerX, playerZ)}
        </div>`,
@@ -456,14 +471,14 @@ export class UIManager {
         <div style="position:absolute;left:${mx(0) - 14}px;top:${mz(-170) - 10}px;font-size:10px;color:#9fd8e8;">FARO</div>
         ${dots}${player}
       </div>
-      <div style="font-size:10px;color:#7a98a8;margin-top:5px;">⭐ logrado · ◉ activo · gris bloqueado · ● tú</div>
+      <div style="font-size:10px;color:#7a98a8;margin-top:5px;">dorado logrado · ◉ activo · gris bloqueado · ● tú</div>
     </div>`;
   }
 
   /** Pantalla de zona completada: Destellos, Lumas, secretos y porcentaje. */
   showFaroScreen(rows: DestelloRow[], lumas: number, secrets: number, percent: number): void {
     const list = rows.map((r) => {
-      const icon = r.estado === 'completado' ? '⭐' : r.estado === 'pendiente' ? '◇' : '🔒';
+      const icon = r.estado === 'completado' ? kitIcon('destello', 15, -2) : r.estado === 'pendiente' ? '◇' : '🔒';
       const color = r.estado === 'completado' ? COLOR.gold : r.estado === 'pendiente' ? '#9fd8e8' : '#6a7a88';
       return `<div style="color:${color};font-size:14px;line-height:1.7;">${icon} ${r.nombre}</div>`;
     }).join('');
@@ -472,7 +487,7 @@ export class UIManager {
        <p style="font-size:13px;color:#c7b3ea;font-style:italic;margin:2px 0;">Elaria: «La luz no estaba perdida. Solo esperaba que alguien la reuniera.»</p>
        <div style="${GLASS}border-radius:14px;padding:12px 22px;text-align:left;">${list}</div>
        <div style="display:flex;gap:18px;font-size:14px;">
-         <span>🔹 <b>${lumas}</b> Lumas</span>
+         <span>${kitIcon('luma', 15, -2)} <b>${lumas}</b> Lumas</span>
          <span>🗝 <b>${secrets}</b>/3 secretos</span>
          <span style="color:${COLOR.gold};">✔ <b>${percent}%</b></span>
        </div>

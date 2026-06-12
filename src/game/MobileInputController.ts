@@ -35,31 +35,34 @@ export class MobileInputController {
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
 
   constructor(container: HTMLElement) {
+    // Prefijo correcto en local y en GitHub Pages (sprites del kit UI)
+    const path = window.location.pathname;
+    const idx = path.indexOf('/game');
+    const kit = `${idx > 0 ? path.slice(0, idx) : ''}/ui/kit`;
+
     this.root = document.createElement('div');
     this.root.style.cssText =
       'position:absolute;inset:0;pointer-events:none;z-index:20;touch-action:none;user-select:none;-webkit-user-select:none;';
 
-    // --- Joystick virtual ---
+    // --- Joystick virtual (sprites del kit oficial) ---
     this.stickBase = document.createElement('div');
     this.stickBase.style.cssText =
-      'position:absolute;left:24px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:118px;height:118px;border-radius:50%;' +
-      'background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);' +
-      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,20,40,.25);pointer-events:auto;';
+      'position:absolute;left:24px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:124px;height:124px;border-radius:50%;' +
+      `background:url("${kit}/joy-base.png") center/contain no-repeat;` +
+      'filter:drop-shadow(0 4px 10px rgba(0,20,40,.35));pointer-events:auto;';
     this.stickKnob = document.createElement('div');
     this.stickKnob.style.cssText =
-      'position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;' +
-      'background:rgba(255,255,255,.45);transform:translate(-50%,-50%);transition:transform .05s;';
+      'position:absolute;left:50%;top:50%;width:58px;height:58px;' +
+      `background:url("${kit}/joy-knob.png") center/contain no-repeat;` +
+      'transform:translate(-50%,-50%);transition:transform .05s;';
     this.stickBase.appendChild(this.stickKnob);
     this.root.appendChild(this.stickBase);
 
-    // --- Botones de acción (guía UI): salto = el más grande, teal Auralis;
-    //     giro/acción = coral, algo menor. Respetan el safe area inferior. ---
-    const jumpBtn = this.makeButton('⬆',
-      'right:22px;bottom:calc(112px + env(safe-area-inset-bottom, 0px));width:86px;height:86px;font-size:36px;' +
-      'background:rgba(30,203,205,.42);border-color:rgba(30,203,205,.8);');
-    const attackBtn = this.makeButton('🗡',
-      'right:34px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:64px;height:64px;font-size:26px;' +
-      'background:rgba(238,120,88,.45);border-color:rgba(238,120,88,.8);');
+    // --- Botones de acción del kit: salto (espiral, grande) y ataque (espada) ---
+    const jumpBtn = this.makeButton(`${kit}/btn-jump.png`,
+      'right:22px;bottom:calc(112px + env(safe-area-inset-bottom, 0px));width:88px;height:88px;');
+    const attackBtn = this.makeButton(`${kit}/btn-attack.png`,
+      'right:34px;bottom:calc(32px + env(safe-area-inset-bottom, 0px));width:66px;height:66px;');
     jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.jumpQueued = true; this.pressFx(jumpBtn); });
     attackBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.attackQueued = true; this.pressFx(attackBtn); });
     this.root.appendChild(jumpBtn);
@@ -79,14 +82,12 @@ export class MobileInputController {
     container.appendChild(this.root);
   }
 
-  private makeButton(icon: string, extraCss: string): HTMLDivElement {
+  private makeButton(spriteUrl: string, extraCss: string): HTMLDivElement {
     const btn = document.createElement('div');
-    btn.textContent = icon;
     btn.style.cssText =
-      'position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
-      'color:#fff;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.16);' +
-      'backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,20,40,.25);' +
-      'text-shadow:0 2px 4px rgba(0,0,0,.35);transition:transform .08s;' +
+      'position:absolute;' +
+      `background:url("${spriteUrl}") center/contain no-repeat;` +
+      'filter:drop-shadow(0 4px 10px rgba(0,20,40,.35));transition:transform .08s;' +
       'pointer-events:auto;touch-action:none;' + extraCss;
     return btn;
   }
