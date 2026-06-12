@@ -223,12 +223,13 @@ export class LevelManager {
   private addRamp(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number,
     width: number, mat: THREE.Material = this.matStone): void {
     const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
-    const len = Math.hypot(dx, dz);
-    const slopeLen = Math.hypot(len, dy);
+    const slopeLen = Math.hypot(Math.hypot(dx, dz), dy);
     const ramp = new THREE.Mesh(new THREE.BoxGeometry(width, 0.5, slopeLen + 1), mat);
     ramp.position.set((x0 + x1) / 2, (y0 + y1) / 2 + 0.05, (z0 + z1) / 2);
-    ramp.rotation.y = Math.atan2(dx, dz);
-    ramp.rotation.x = -Math.atan2(dy, len);
+    // Alinear el eje largo (+Z local) con la pendiente real, sin alabeo:
+    // válido para cualquier dirección (los Euler manuales invertían la
+    // inclinación N-S y ladeaban las rampas E-O).
+    ramp.lookAt(ramp.position.x + dx, ramp.position.y + dy, ramp.position.z + dz);
     ramp.receiveShadow = true;
     ramp.castShadow = true;
     this.group.add(ramp);
