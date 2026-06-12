@@ -100,6 +100,9 @@ export class GameManager {
 
   constructor(container: HTMLElement) {
     this.container = container;
+    // Si queda un montaje anterior (doble mount de React), se limpia:
+    // nunca debe haber dos canvas/HUD superpuestos.
+    container.replaceChildren();
     container.style.position = 'relative';
     container.style.overflow = 'hidden';
     container.style.touchAction = 'none';
@@ -149,6 +152,18 @@ export class GameManager {
     const cam = this.cameraCtrl.camera;
     cam.far = 1600;
     this.scene.fog = null; // vistas técnicas: sin niebla
+    if (view === 'free') {
+      // ?view=free&cam=x,y,z&look=x,y,z — inspección de cualquier rincón
+      const params = new URLSearchParams(window.location.search);
+      const v = (key: string, dflt: number[]): number[] =>
+        (params.get(key)?.split(',').map(Number) ?? dflt);
+      const [cx, cy, cz] = v('cam', [0, 30, 60]);
+      const [lx, ly, lz] = v('look', [0, 0, 0]);
+      cam.position.set(cx, cy, cz);
+      cam.lookAt(lx, ly, lz);
+      cam.updateProjectionMatrix();
+      return;
+    }
     if (view === 'top') {
       cam.position.set(0, 560, -10);
       cam.up.set(0, 0, -1);

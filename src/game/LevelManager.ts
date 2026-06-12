@@ -239,6 +239,10 @@ export class LevelManager {
   private addStairs(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, width: number): void {
     const rise = y1 - y0;
     const steps = Math.max(2, Math.round(rise / 0.2));
+    // Cada peldaño cubre su tramo completo del recorrido: sin huecos entre
+    // escalones aunque la pendiente sea tendida (si no, no se puede subir).
+    const run = Math.hypot(x1 - x0, z1 - z0);
+    const depth = Math.max(0.3, (run / steps) * 1.06);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(x1 - x0, z1 - z0));
     for (let i = 0; i < steps; i++) {
@@ -246,7 +250,7 @@ export class LevelManager {
       m.compose(
         new THREE.Vector3(x0 + (x1 - x0) * t, y0 + rise * (i + 1) / steps - 0.1, z0 + (z1 - z0) * t),
         q,
-        new THREE.Vector3(width, 0.22, 0.34),
+        new THREE.Vector3(width, 0.22, depth),
       );
       this.stairSteps.push(m.clone());
     }
@@ -788,7 +792,8 @@ export class LevelManager {
     this.checkpoints.push(new THREE.Vector3(0, 12, 10));
     const houses: [number, number, number, number, number][] = [
       // x, z, ancho, alto, rotY (todo en la cima plana de la mesa y12)
-      [-24, 18, 7, 7, 0.3], [-32, 2, 8, 7.5, 0.9], [24, 16, 7.5, 6.5, -0.4],
+      // Nota: x32 deja libre la escalera del mirador (x22, z12→20)
+      [-24, 18, 7, 7, 0.3], [-32, 2, 8, 7.5, 0.9], [32, 13, 7.5, 6.5, -0.4],
       [34, 0, 6.5, 8, -1.1], [-16, -8, 9, 8.5, 0.1], [16, -10, 7, 7, 0.2],
     ];
     for (const [x, z, w, h, rot] of houses) {
