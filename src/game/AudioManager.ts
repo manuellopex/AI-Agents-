@@ -8,6 +8,9 @@
  */
 export class AudioManager {
   private ctx: AudioContext | null = null;
+  /** Pista de música real (public/audio/music.mp3) si el archivo existe. */
+  private musicTrack: HTMLAudioElement | null = null;
+  private musicTrackReady = false;
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
@@ -17,6 +20,18 @@ export class AudioManager {
   /** Debe llamarse tras un gesto del usuario (requisito de los navegadores). */
   init(): void {
     if (this.ctx) return;
+    // Música real del juego: si hay un MP3 en public/audio/, sustituye al sinte
+    try {
+      const path = window.location.pathname;
+      const idx = path.indexOf('/game');
+      const base = idx > 0 ? path.slice(0, idx) : '';
+      const track = new Audio(`${base}/audio/music.mp3`);
+      track.loop = true;
+      track.volume = 0.35;
+      track.addEventListener('canplaythrough', () => { this.musicTrackReady = true; }, { once: true });
+      track.addEventListener('error', () => { this.musicTrack = null; }, { once: true });
+      this.musicTrack = track;
+    } catch { this.musicTrack = null; }
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx();
     this.masterGain = this.ctx.createGain();
@@ -30,6 +45,7 @@ export class AudioManager {
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.5;
+    if (this.musicTrack) this.musicTrack.muted = muted;
   }
 
   /** Tono simple con envolvente. Base de todos los efectos. */
@@ -70,8 +86,12 @@ export class AudioManager {
   playDig(): void { this.tone(200, 0.15, 'square', 0.18, 120); setTimeout(() => this.tone(160, 0.15, 'square', 0.16, 100), 120); }
   playDefeat(): void { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => this.tone(f, 0.4, 'triangle', 0.22), i * 180)); }
 
-  /** Música de fondo placeholder: arpegio pentatónico relajado, vibra tropical. */
+  /** Música: la pista real si existe; si no, arpegio placeholder. */
   startMusic(): void {
+    if (this.musicTrack && this.musicTrackReady) {
+      if (!this.muted) void this.musicTrack.play().catch(() => undefined);
+      return;
+    }
     if (!this.ctx || this.musicTimer) return;
     // Escala pentatónica mayor de Do — alegre y "de aventura".
     const scale = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3];
@@ -94,6 +114,7 @@ export class AudioManager {
   }
 
   stopMusic(): void {
+    this.musicTrack?.pause();
     if (this.musicTimer) {
       clearInterval(this.musicTimer);
       this.musicTimer = null;
@@ -101,7 +122,8 @@ export class AudioManager {
   }
 
   dispose(): void {
-    this.stopMusic();
+    this.musicTrack?.pause();
+    this.musicTrack = null;
     this.ctx?.close();
     this.ctx = null;
   }

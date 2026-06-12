@@ -346,19 +346,45 @@ export class UIManager {
     this.overlay = null;
   }
 
+  /** Pantalla de título: el key art del juego a sangre completa. */
   showStartScreen(): void {
-    this.showOverlay(
-      `<div style="font-size:14px;letter-spacing:4px;color:#7de8c3;">MAEL &amp; ORYN</div>
-       <h1 style="margin:4px 0;font-size:30px;color:${COLOR.gold};text-shadow:0 3px 0 rgba(0,0,0,.35);">El Primer Destello</h1>
-       <div style="font-size:13px;letter-spacing:2px;color:#9fd8e8;">CAPÍTULO 1 · COSTA BRILLANTE</div>
-       <p style="max-width:320px;font-size:14px;line-height:1.55;color:#d8eef5;">
-         Consigue <b style="color:${COLOR.gold}">3 Destellos de Auralis</b> para encender el
-         <b style="color:${COLOR.gold}">Faro del Alba</b>. Explora los 3 caminos: cada Destello
-         es un reto distinto. Los <b style="color:#9fe8ff">Lumas</b> son tu moneda.</p>
-       <p style="max-width:300px;font-size:12px;font-style:italic;color:#a8c8d8;">
-         «La luz no estaba perdida. Solo esperaba que alguien la reuniera.»</p>`,
-      [{ label: '▶ Jugar', action: () => this.onStart?.() }],
-    );
+    this.hideOverlay();
+    const base = (() => {
+      const path = window.location.pathname;
+      const idx = path.indexOf('/game');
+      return idx > 0 ? path.slice(0, idx) : '';
+    })();
+
+    this.overlay = document.createElement('div');
+    this.overlay.style.cssText =
+      'position:absolute;inset:0;pointer-events:auto;display:flex;flex-direction:column;' +
+      'align-items:center;justify-content:flex-end;padding-bottom:7%;' +
+      `background:#06141f url('${base}/ui/title.jpg') center top / cover no-repeat;`;
+
+    // Degradado inferior para asentar botón y tagline sobre el arte
+    const gradient = document.createElement('div');
+    gradient.style.cssText =
+      'position:absolute;left:0;right:0;bottom:0;height:34%;pointer-events:none;' +
+      'background:linear-gradient(180deg, transparent, rgba(4,16,24,.88));';
+    this.overlay.appendChild(gradient);
+
+    const playBtn = document.createElement('button');
+    playBtn.textContent = '▶  Jugar';
+    playBtn.style.cssText =
+      'position:relative;pointer-events:auto;font:800 21px system-ui;color:#3a2a00;' +
+      `background:linear-gradient(180deg,#ffd97a,${COLOR.gold});border:none;border-radius:18px;` +
+      'padding:16px 64px;box-shadow:0 5px 0 #b8862a, 0 10px 30px rgba(0,0,0,.45);letter-spacing:1px;';
+    playBtn.addEventListener('pointerdown', () => this.onStart?.());
+    this.overlay.appendChild(playBtn);
+
+    const tagline = document.createElement('div');
+    tagline.textContent = '✦ Un destello de esperanza. Una isla por descubrir. ✦';
+    tagline.style.cssText =
+      `position:relative;margin-top:14px;color:${COLOR.sand};font:600 12px system-ui;` +
+      'letter-spacing:2px;text-shadow:0 2px 6px rgba(0,0,0,.6);text-align:center;';
+    this.overlay.appendChild(tagline);
+
+    this.root.appendChild(this.overlay);
   }
 
   /** Pausa con resumen de progreso, misiones y mini-mapa (guía §10-11). */
