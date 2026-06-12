@@ -17,7 +17,7 @@ export interface EnemyDef {
 }
 
 export interface Crate {
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
   obstacle: Obstacle;
   broken: boolean;
 }
@@ -200,6 +200,7 @@ export class LevelManager {
     this.flushStairs();
     this.snapLumasToGround();
     this.placeEnemies();
+    this.placeCheckpointFlags();
     scene.add(this.group);
   }
 
@@ -810,6 +811,11 @@ export class LevelManager {
     market.position.set(14, 12.05, 4);
     this.group.add(market);
     this.groundMeshes.push(market);
+    this.addFountain(14, 12.25, 4);
+    // Jardines entre las casas (arte de librería; si falta, la vegetación procedural cubre)
+    this.addGarden(-8, 12, 18, 'garden');
+    this.addGarden(6, 12, -16, 'garden2');
+    this.addGarden(-26, 12, -14, 'garden');
     // Escaleras urbanas + mirador a la playa
     this.addStairs(22, 12, 12, 22, 14.4, 20, 2.5);
     this.addPlatform(22, 14.4, 24, 7, 1, 7, this.matStone);
@@ -827,15 +833,16 @@ export class LevelManager {
     for (const [x, z, w, d, h, rot] of buildings) {
       this.addBuilding(x, 28, z, w, d, h, rot);
     }
-    // Segunda plaza (con fuente de cristal)
+    // Segunda plaza (con fuente)
     const plaza2 = new THREE.Mesh(new THREE.CylinderGeometry(8, 8.5, 0.4, 22), this.matStone);
     plaza2.position.set(0, 28.05, -72);
     this.group.add(plaza2);
     this.groundMeshes.push(plaza2);
-    const fountain = new THREE.Mesh(new THREE.OctahedronGeometry(1.6), this.matAuralis);
-    fountain.position.set(0, 30, -72);
-    this.group.add(fountain);
-    this.obstacles.push({ position: new THREE.Vector3(0, 28, -72), radius: 2 });
+    this.addFountain(0, 28.25, -72);
+
+    // Jardines junto a los edificios
+    this.addGarden(-10, 28, -52, 'garden2');
+    this.addGarden(12, 28, -90, 'garden');
 
     // Terraza Mirador (12×10) asomada al mar este, con barandilla
     const mirador = new THREE.Mesh(new THREE.BoxGeometry(12, 0.8, 10), this.matStone);
@@ -886,13 +893,23 @@ export class LevelManager {
     }
   }
 
+  /** Rota entre las variantes de casa de la librería para que el barrio no se repita. */
+  private houseVariant = 0;
+  private static readonly HOUSE_SLOTS = ['house', 'house2', 'house3', 'house4'];
+
   private addHouseScaled(x: number, yGround: number, z: number, w: number, h: number, color: number, rotY: number): void {
-    const gltfHouse = this.assets?.getClone('house', h);
+    const slot = LevelManager.HOUSE_SLOTS[this.houseVariant % LevelManager.HOUSE_SLOTS.length];
+    const gltfHouse = this.assets?.getClone(slot, h) ?? this.assets?.getClone('house', h);
     if (gltfHouse) {
+      this.houseVariant++;
+      // Colisión a partir de la huella real del modelo (antes de rotarlo)
+      const box = new THREE.Box3().setFromObject(gltfHouse);
+      const hx = Math.max((box.max.x - box.min.x) / 2, 1);
+      const hz = Math.max((box.max.z - box.min.z) / 2, 1);
       gltfHouse.position.set(x, yGround + gltfHouse.position.y, z);
       gltfHouse.rotation.y = rotY;
       this.group.add(gltfHouse);
-      this.boxColliders.push({ cx: x, cz: z, hx: w / 2, hz: w * 0.43, rotY, y0: yGround, y1: yGround + h });
+      this.boxColliders.push({ cx: x, cz: z, hx, hz, rotY, y0: yGround, y1: yGround + h });
       return;
     }
     const house = new THREE.Group();
@@ -1241,13 +1258,64 @@ export class LevelManager {
   }
 
   private addCrate(x: number, yGround: number, z: number): void {
-    const mesh = new THREE.Mesh(new RoundedBoxGeometry(1.4, 1.4, 1.4, 2, 0.1), this.matCrate);
-    mesh.position.set(x, yGround + 0.7, z);
-    mesh.castShadow = true;
+    let mesh: THREE.Object3D | null = this.assets?.getClone('crate', 1.4) ?? null;
+    if (mesh) {
+      // El GLB ya trae los pies en el origen tras normalizar la altura
+      mesh.position.x = x;
+      mesh.position.y += yGround;
+      mesh.position.z = z;
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+    } else {
+      mesh = new THREE.Mesh(new RoundedBoxGeometry(1.4, 1.4, 1.4, 2, 0.1), this.matCrate);
+      mesh.position.set(x, yGround + 0.7, z);
+      mesh.castShadow = true;
+    }
     this.group.add(mesh);
     const obstacle: Obstacle = { position: new THREE.Vector3(x, yGround, z), radius: 0.95 };
     this.obstacles.push(obstacle);
     this.crates.push({ mesh, obstacle, broken: false });
+  }
+
+  /** Fuente de plaza: modelo de librería con respaldo de cristal procedural. */
+  private addFountain(x: number, yGround: number, z: number): void {
+    const gltf = this.assets?.getClone('fountain', 2.2);
+    if (gltf) {
+      gltf.position.x = x;
+      gltf.position.y += yGround;
+      gltf.position.z = z;
+      this.group.add(gltf);
+      this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: 2.1 });
+      return;
+    }
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1.6), this.matAuralis);
+    crystal.position.set(x, yGround + 1.9, z);
+    this.group.add(crystal);
+    this.obstacles.push({ position: new THREE.Vector3(x, yGround, z), radius: 2 });
+  }
+
+  /** Parche de jardín decorativo (sin colisión: se puede atravesar el césped). */
+  private addGarden(x: number, yGround: number, z: number, slot: 'garden' | 'garden2'): void {
+    const gltf = this.assets?.getClone(slot, slot === 'garden2' ? 4.2 : 2.8);
+    if (!gltf) return;
+    gltf.position.x = x;
+    gltf.position.y += yGround;
+    gltf.position.z = z;
+    gltf.rotation.y = Math.random() * Math.PI * 2;
+    this.group.add(gltf);
+  }
+
+  /** Bandera en cada checkpoint: el jugador ve dónde reaparecerá. */
+  private placeCheckpointFlags(): void {
+    for (let i = 1; i < this.checkpoints.length; i++) {
+      const cp = this.checkpoints[i];
+      const flag = this.assets?.getClone('flag', 2.6);
+      if (!flag) return;
+      // A un lado del punto exacto para no estorbar el paso
+      flag.position.x += cp.x + 1.6;
+      flag.position.y += cp.y;
+      flag.position.z += cp.z;
+      this.group.add(flag);
+    }
   }
 
   private addPad(x: number, yGround: number, z: number, power: number): void {

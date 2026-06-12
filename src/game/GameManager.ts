@@ -127,7 +127,12 @@ export class GameManager {
 
   /** Precarga la librería de assets y levanta el mundo. */
   private async bootstrap(): Promise<void> {
-    await this.assets.preload(['mael', 'oryn', 'tree', 'rock', 'house']);
+    await this.assets.preload([
+      'mael', 'oryn', 'tree', 'rock',
+      // Slots con respaldo de librería libre (Kenney, MIT)
+      'house', 'house2', 'house3', 'house4',
+      'fountain', 'garden', 'garden2', 'flag', 'crate',
+    ]);
     this.buildWorld();
     this.handleResize();
     window.addEventListener('resize', this.handleResize);

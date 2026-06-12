@@ -18,6 +18,24 @@ import { applyCloudShadows } from './CloudShadows';
  *  - personajes: clips de animación con palabras clave en el nombre
  *    (idle, run, jump, fall, spin/attack, punch)
  */
+/**
+ * Slots con arte de librerías libres ya integrado (Kenney, licencia MIT —
+ * ver public/models/LICENSES.md). Cada slot apunta a un archivo dentro de
+ * public/models/; los GLB de Kenney referencian Textures/colormap.png
+ * relativo, por eso se conserva la estructura de subcarpetas.
+ */
+const SLOT_PATHS: Record<string, string> = {
+  house: 'kenney-city/building-small-a',
+  house2: 'kenney-city/building-small-b',
+  house3: 'kenney-city/building-small-c',
+  house4: 'kenney-city/building-small-d',
+  fountain: 'kenney-city/pavement-fountain',
+  garden: 'kenney-city/grass-trees',
+  garden2: 'kenney-city/grass-trees-tall',
+  flag: 'kenney-plat/flag',
+  crate: 'kenney-plat/brick',
+};
+
 export class AssetLibrary {
   private cache = new Map<string, THREE.Group | null>();
   private clips = new Map<string, THREE.AnimationClip[]>();
@@ -39,25 +57,35 @@ export class AssetLibrary {
     return idx > 0 ? path.slice(0, idx) : '';
   }
 
-  /** Intenta cargar una lista de modelos; los que falten quedan en null. */
+  /**
+   * Intenta cargar una lista de modelos; los que falten quedan en null.
+   * Primero busca `<nombre>.glb` en la raíz (arte propio, drop-in); si no
+   * existe y el slot tiene arte de librería libre, usa ese como respaldo.
+   */
   async preload(names: string[]): Promise<void> {
     await Promise.all(names.map(async (name) => {
-      try {
-        const gltf = await this.loader.loadAsync(`${this.basePath()}/models/${name}.glb`);
-        gltf.scene.traverse((obj) => {
-          const mesh = obj as THREE.Mesh;
-          if (mesh.isMesh) {
-            mesh.castShadow = true;
-            // Coherencia con el mundo: las nubes también ensombrecen los GLB
-            const mat = mesh.material as THREE.MeshStandardMaterial;
-            if (mat && mat.isMeshStandardMaterial) applyCloudShadows(mat);
-          }
-        });
-        this.cache.set(name, gltf.scene);
-        this.clips.set(name, gltf.animations ?? []);
-      } catch {
-        this.cache.set(name, null); // no existe: se usará el procedural
+      const candidates = [name];
+      if (SLOT_PATHS[name]) candidates.push(SLOT_PATHS[name]);
+      for (const file of candidates) {
+        try {
+          const gltf = await this.loader.loadAsync(`${this.basePath()}/models/${file}.glb`);
+          gltf.scene.traverse((obj) => {
+            const mesh = obj as THREE.Mesh;
+            if (mesh.isMesh) {
+              mesh.castShadow = true;
+              // Coherencia con el mundo: las nubes también ensombrecen los GLB
+              const mat = mesh.material as THREE.MeshStandardMaterial;
+              if (mat && mat.isMeshStandardMaterial) applyCloudShadows(mat);
+            }
+          });
+          this.cache.set(name, gltf.scene);
+          this.clips.set(name, gltf.animations ?? []);
+          return;
+        } catch {
+          // probar siguiente candidato
+        }
       }
+      this.cache.set(name, null); // no existe: se usará el procedural
     }));
   }
 
