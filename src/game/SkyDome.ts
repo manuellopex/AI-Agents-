@@ -49,6 +49,9 @@ export class SkyDome {
           float disc = smoothstep(0.9985, 0.9995, toSun);
           float halo = pow(toSun, 24.0) * 0.5;
           sky += uSun * (disc * 2.2 + halo);
+          // Dither: rompe el banding del degradado (sin sin(): apto móvil)
+          float dither = fract(dot(gl_FragCoord.xy, vec2(0.7548776662, 0.5698402909)));
+          sky += (dither - 0.5) * (2.0 / 255.0);
           gl_FragColor = vec4(sky, 1.0);
         }
       `,

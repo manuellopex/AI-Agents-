@@ -78,6 +78,8 @@ export class GameManager {
   // baja la resolución interna y apaga el bloom automáticamente.
   private lowFpsTime = 0;
   private qualityLowered = false;
+  /** ?fx=off — render directo sin postproceso (depuración). */
+  private directRender = false;
 
   // Estado de aventura
   private faroDone = false;
@@ -111,8 +113,11 @@ export class GameManager {
     this.ui = new UIManager(container);
     this.wireUi();
     this.input.setVisible(false);
+    this.ui.setHudVisible(false);
 
-    // Arranque asíncrono: precargar los modelos GLB (si existen) y construir
+    // El menú aparece AL INSTANTE (con "Cargando…") y el mundo se
+    // construye detrás; al terminar, el botón pasa a "Jugar".
+    this.ui.showStartScreen();
     void this.bootstrap();
   }
 
@@ -122,7 +127,7 @@ export class GameManager {
     this.buildWorld();
     this.handleResize();
     window.addEventListener('resize', this.handleResize);
-    this.ui.showStartScreen();
+    this.ui.setStartReady(true);
     this.loop();
   }
 
@@ -171,6 +176,7 @@ export class GameManager {
 
   private startPlaying(): void {
     this.ui.hideOverlay();
+    this.ui.setHudVisible(true);
     this.input.setVisible(true);
     this.audio.startMusic();
     this.state = 'playing';
@@ -314,12 +320,15 @@ export class GameManager {
     this.composer.addPass(new RenderPass(this.scene, this.cameraCtrl.camera));
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(this.container.clientWidth, this.container.clientHeight),
-      0.38,  // intensidad
-      0.5,   // radio
-      0.92,  // umbral alto: solo brilla lo realmente luminoso (emisivos, sol)
+      0.5,   // intensidad
+      0.4,   // radio
+      1.0,   // umbral HDR: SOLO emisivos intensos y el sol (cero velo)
     );
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('bloom') === 'off') this.bloomPass.enabled = false;
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
+    this.directRender = params.get('fx') === 'off';
 
     // El Destello del Faro espera en la cima desde el principio (visible al subir)
     this.destellos.spawnVisual('faro', this.level.faroDestelloPos);
@@ -842,10 +851,11 @@ export class GameManager {
     this.effects.update(dt);
     this.vegetation.update(dt);
     this.atmosphere.update(dt);
-    cloudTimeUniform.value += dt;
+    cloudTimeUniform.value = (cloudTimeUniform.value + dt) % 3600;
 
     this.updateAdaptiveQuality(dt);
-    this.composer.render();
+    if (this.directRender) this.renderer.render(this.scene, this.cameraCtrl.camera);
+    else this.composer.render();
   };
 
   /** Baja la calidad una vez si el framerate sostenido es bajo. */

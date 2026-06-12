@@ -69,6 +69,8 @@ export class UIManager {
   private skipBtn!: HTMLDivElement;
   private hudGroup: HTMLElement[] = [];
   private overlay: HTMLDivElement | null = null;
+  private playBtn: HTMLButtonElement | null = null;
+  private startReady = false;
 
   onPause: (() => void) | null = null;
   /** Se dispara con cada línea de diálogo (lo usa la narración por voz). */
@@ -265,6 +267,23 @@ export class UIManager {
     if (btn) btn.textContent = muted ? '🔇' : '🔊';
   }
 
+  /** Muestra u oculta el HUD completo (título, carga, cutscenes). */
+  setHudVisible(visible: boolean): void {
+    for (const el of this.hudGroup) {
+      el.style.opacity = visible ? '1' : '0';
+      el.style.pointerEvents = visible ? '' : 'none';
+    }
+  }
+
+  /** El mundo terminó de cargar: el botón pasa de "Cargando…" a "Jugar". */
+  setStartReady(ready: boolean): void {
+    this.startReady = ready;
+    if (this.playBtn) {
+      this.playBtn.textContent = ready ? '▶  Jugar' : 'Cargando…';
+      this.playBtn.style.opacity = ready ? '1' : '0.6';
+    }
+  }
+
   /** Modo cinemático: barras de cine, HUD oculto y botón Saltar. */
   setCinematic(active: boolean): void {
     this.barTop.style.height = active ? '9%' : '0';
@@ -369,12 +388,16 @@ export class UIManager {
     this.overlay.appendChild(gradient);
 
     const playBtn = document.createElement('button');
-    playBtn.textContent = '▶  Jugar';
+    playBtn.textContent = this.startReady ? '▶  Jugar' : 'Cargando…';
     playBtn.style.cssText =
       'position:relative;pointer-events:auto;font:800 21px system-ui;color:#3a2a00;' +
       `background:linear-gradient(180deg,#ffd97a,${COLOR.gold});border:none;border-radius:18px;` +
-      'padding:16px 64px;box-shadow:0 5px 0 #b8862a, 0 10px 30px rgba(0,0,0,.45);letter-spacing:1px;';
-    playBtn.addEventListener('pointerdown', () => this.onStart?.());
+      'padding:16px 64px;box-shadow:0 5px 0 #b8862a, 0 10px 30px rgba(0,0,0,.45);letter-spacing:1px;' +
+      (this.startReady ? '' : 'opacity:.6;');
+    playBtn.addEventListener('pointerdown', () => {
+      if (this.startReady) this.onStart?.();
+    });
+    this.playBtn = playBtn;
     this.overlay.appendChild(playBtn);
 
     const tagline = document.createElement('div');

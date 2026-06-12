@@ -69,7 +69,11 @@ export class WaterSurface {
         }
 
         // Noise para las sombras de nubes sobre el mar
-        float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float hash2(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
         float noise2(vec2 p) {
           vec2 i = floor(p);
           vec2 f = fract(p);
@@ -94,11 +98,15 @@ export class WaterSurface {
           color = mix(color, uDeep, smoothstep(1.25, 2.1, nearest));
           float depthMix = smoothstep(0.85, 1.9, nearest);
 
+          // Detalle fino solo de cerca: lejos alasea en franjas, así que se funde
+          float camDist = distance(cameraPosition, vWorld);
+          float detailFade = 1.0 - smoothstep(28.0, 65.0, camDist);
+
           // Caustics: vivos en la banda media/poca profundidad
           float c1 = wave(vWorld.xz * 0.9 + vec2(uTime * 0.5, uTime * 0.35));
           float c2 = wave(vWorld.xz * 1.7 - vec2(uTime * 0.4, uTime * 0.6) + 3.1);
           float caustic = pow(max(c1 * c2, 0.0), 2.0);
-          color += vec3(0.35, 0.5, 0.5) * caustic * (1.0 - depthMix) * 0.6;
+          color += vec3(0.35, 0.5, 0.5) * caustic * (1.0 - depthMix) * 0.6 * detailFade;
 
           // ---- CAPA 2: espuma doble ----
           // Banda nítida pegada a la orilla, ondulando
@@ -108,7 +116,7 @@ export class WaterSurface {
           float ripWobble = sin(uTime * 0.9 + vWorld.z * 0.5 - vWorld.x * 0.2) * 0.05;
           float foamRip = (1.0 - smoothstep(0.0, 0.14, abs(nearest - (1.22 + ripWobble)))) * 0.5;
           // Ruptura orgánica de la espuma con noise
-          float foamBreak = smoothstep(0.32, 0.75, noise2(vWorld.xz * 1.4 + uTime * 0.35));
+          float foamBreak = mix(0.7, smoothstep(0.32, 0.75, noise2(vWorld.xz * 1.4 + uTime * 0.35)), detailFade);
           float foam = clamp((foamEdge + foamRip) * foamBreak * 1.4, 0.0, 1.0);
           color = mix(color, vec3(0.97, 1.0, 0.99), foam * 0.9);
 
@@ -117,12 +125,15 @@ export class WaterSurface {
           color = mix(color, uSky, fresnel * 0.7);
           vec3 reflectDir = reflect(-vViewDir, normalize(vec3(c1 * 0.08, 1.0, c2 * 0.08)));
           float glint = pow(max(dot(reflectDir, uSunDir), 0.0), 90.0);
-          color += vec3(1.0, 0.95, 0.8) * glint * 0.9;
+          color += vec3(1.0, 0.95, 0.8) * glint * 0.9 * detailFade;
           // Las mismas nubes falsas del terreno también ensombrecen el mar
           vec2 cuv = vWorld.xz * 0.016 + vec2(uTime * 0.014, uTime * 0.007);
           float cn = noise2(cuv) * 0.65 + noise2(cuv * 2.6 + 13.0) * 0.35;
           color *= mix(1.0, 0.78, smoothstep(0.52, 0.80, cn));
 
+          // Dither anti-banding (sin sin(): estable en GPUs móviles)
+          float dither = fract(dot(gl_FragCoord.xy, vec2(0.7548776662, 0.5698402909)));
+          color += (dither - 0.5) * (2.0 / 255.0);
           float alpha = 0.92 - (1.0 - depthMix) * 0.12;
           gl_FragColor = vec4(color, alpha);
         }
